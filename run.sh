@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh - Quick launcher for Festival Video Receiver
+# run.sh - Quick launcher
 
-echo "🎉 Starting Festival Video Receiver..."
-python3 festival-receiver.py
+echo "🎁 Starting Gift Video Receiver Server..."
+python3 server.py

