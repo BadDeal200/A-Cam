@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Festival Video Receiver - A Linux tool to receive 15-second videos via ngrok
+Festival Video Receiver - Termux compatible version
 """
 
 import os
@@ -9,20 +9,19 @@ import time
 import json
 import subprocess
 import threading
-import webbrowser
+import signal
+import urllib.request
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import socket
-import signal
 
 # ============================================
 # Configuration
 # ============================================
 UPLOAD_FOLDER = 'festival_videos'
-TEMP_FOLDER = 'templates'
 PORT = 5000
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -360,10 +359,6 @@ def upload_video():
         print(f"📊 Size: {video_info['size']} bytes")
         print(f"📹 Total videos received: {len(received_videos)}\n")
         
-        # Auto-open the video if it's the first one
-        if len(received_videos) == 1:
-            open_video(filepath)
-
         return jsonify({'success': True, 'filename': filename}), 200
 
     except Exception as e:
@@ -378,41 +373,26 @@ def list_videos():
 @app.route('/download/<filename>', methods=['GET'])
 def download_video(filename):
     """Download a specific video"""
-    from flask import send_file
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
-def open_video(filepath):
-    """Open the video file with the default player"""
-    print("🎬 Opening video with default player...")
-    try:
-        if sys.platform == 'linux':
-            subprocess.run(['xdg-open', filepath], check=False)
-        elif sys.platform == 'darwin':
-            subprocess.run(['open', filepath], check=False)
-        elif sys.platform == 'win32':
-            subprocess.run(['start', filepath], shell=True, check=False)
-    except Exception as e:
-        print(f"⚠️ Could not auto-open video: {e}")
-
 # ============================================
-# Main Tool Class
+# Main Tool Class (Termux Compatible)
 # ============================================
 class FestivalReceiver:
     def __init__(self):
         self.festival_name = ""
         self.ngrok_process = None
-        self.flask_process = None
         self.ngrok_url = None
         self.port = PORT
         self.running = True
+        self.ngrok_ready = threading.Event()
 
     def setup_directories(self):
         """Create necessary directories"""
         Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
-        Path(TEMP_FOLDER).mkdir(exist_ok=True)
 
     def get_festival_name(self):
         """Ask user for festival name"""
@@ -431,48 +411,66 @@ class FestivalReceiver:
     def check_ngrok(self):
         """Check if ngrok is installed"""
         try:
-            subprocess.run(['ngrok', '--version'], capture_output=True, check=True)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print("\n❌ ngrok is not installed or not in PATH!")
-            print("📥 Install ngrok from: https://ngrok.com/download")
-            print("Then authenticate with: ngrok config add-authtoken YOUR_TOKEN")
-            return False
+            result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+        except FileNotFoundError:
+            pass
+        
+        print("\n❌ ngrok is not installed or not in PATH!")
+        print("📥 Install ngrok from: https://ngrok.com/download")
+        print("📖 Then authenticate with: ngrok config add-authtoken YOUR_TOKEN")
+        return False
+
+    def monitor_ngrok(self):
+        """Monitor ngrok process and get URL"""
+        try:
+            # Wait for ngrok to start and get URL from API
+            time.sleep(3)
+            
+            for attempt in range(10):  # Try for ~30 seconds
+                try:
+                    with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=2) as response:
+                        data = json.loads(response.read().decode())
+                        for tunnel in data.get('tunnels', []):
+                            if tunnel.get('proto') == 'https':
+                                self.ngrok_url = tunnel.get('public_url')
+                                self.ngrok_ready.set()
+                                return
+                except Exception:
+                    time.sleep(3)
+            
+            print("\n⚠️ Could not get ngrok URL automatically")
+            print("📋 Please check http://localhost:4040 for the URL")
+            
+        except Exception as e:
+            print(f"❌ Error monitoring ngrok: {e}")
 
     def start_ngrok(self):
         """Start ngrok tunnel"""
         print(f"\n🚀 Starting ngrok tunnel on port {self.port}...")
         
         try:
+            # Start ngrok in background
             self.ngrok_process = subprocess.Popen(
-                ['ngrok', 'http', str(self.port), '--log=stdout'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                ['ngrok', 'http', str(self.port)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
             )
             
-            # Wait for ngrok to start and get the URL
-            time.sleep(3)
+            # Monitor for URL
+            monitor_thread = threading.Thread(target=self.monitor_ngrok)
+            monitor_thread.daemon = True
+            monitor_thread.start()
             
-            # Get ngrok URL from API
-            import urllib.request
-            import json
-            
-            try:
-                with urllib.request.urlopen('http://localhost:4040/api/tunnels') as response:
-                    data = json.loads(response.read().decode())
-                    for tunnel in data.get('tunnels', []):
-                        if tunnel.get('proto') == 'https':
-                            self.ngrok_url = tunnel.get('public_url')
-                            break
-                    
-                    if self.ngrok_url:
-                        print(f"✅ ngrok tunnel established!")
-                        print(f"🌐 Public URL: {self.ngrok_url}")
-                        return True
-            except Exception as e:
-                print(f"⚠️ Could not get ngrok URL automatically: {e}")
-                print("Please check http://localhost:4040 for the URL")
+            # Wait for URL or timeout
+            if self.ngrok_ready.wait(timeout=30):
+                print(f"✅ ngrok tunnel established!")
+                print(f"🌐 Public URL: {self.ngrok_url}")
+                return True
+            else:
+                print("⚠️ ngrok started but URL not found")
                 return False
                 
         except Exception as e:
@@ -483,7 +481,6 @@ class FestivalReceiver:
         """Start the Flask server"""
         print(f"\n🔧 Starting Flask server on port {self.port}...")
         
-        # Run Flask in a separate thread
         def run_flask():
             app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
         
@@ -507,15 +504,7 @@ class FestivalReceiver:
         print("4. They record a 15-second video")
         print("5. Video auto-uploads to YOU!")
         print("="*60)
-        
-        # Copy to clipboard
-        try:
-            import pyperclip
-            pyperclip.copy(self.ngrok_url)
-            print("\n📋 Link copied to clipboard!")
-        except ImportError:
-            print("\n💡 Tip: Install pyperclip for automatic copy: pip install pyperclip")
-            print(f"   Copy this URL: {self.ngrok_url}")
+        print("\n📋 The link is printed above - copy it manually (Termux doesn't support clipboard)")
 
     def wait_for_videos(self):
         """Monitor for incoming videos"""
@@ -525,9 +514,7 @@ class FestivalReceiver:
         
         try:
             while self.running:
-                time.sleep(1)
-                
-                # Check if any new videos were received
+                # Check for new videos
                 if received_videos:
                     latest = received_videos[-1]
                     print(f"\n📹 New video received!")
@@ -535,33 +522,45 @@ class FestivalReceiver:
                     print(f"   Size: {latest['size']:,} bytes")
                     print(f"   Total videos: {len(received_videos)}")
                     
-                    # Show menu for quick actions
-                    print("\nOptions:")
-                    print("  [Enter] Continue waiting")
-                    print("  [o] Open latest video")
-                    print("  [l] List all videos")
+                    # Show options
+                    print("\nOptions (type and press Enter):")
+                    print("  [v] View all videos")
+                    print("  [d] Download latest video")
                     print("  [q] Quit")
+                    print("  [Enter] Continue waiting")
                     
-                    # Wait for user input with timeout
+                    # Simple input with timeout
                     import select
                     import sys
                     
-                    # Check if input is available
                     if select.select([sys.stdin], [], [], 1)[0]:
                         choice = sys.stdin.readline().strip().lower()
-                        if choice == 'o':
-                            open_video(latest['path'])
-                        elif choice == 'l':
+                        if choice == 'v':
                             self.list_videos()
+                        elif choice == 'd':
+                            self.download_latest()
                         elif choice == 'q':
                             self.running = False
                             break
-                    
-                    # Clear the video list to avoid repeated notifications
-                    # We keep the list but flag that we've shown the notification
-                    
+                
+                time.sleep(1)
+                
         except KeyboardInterrupt:
             print("\n\n👋 Shutting down...")
+
+    def download_latest(self):
+        """Download the latest video to a user-specified location"""
+        if not received_videos:
+            print("📭 No videos available")
+            return
+        
+        latest = received_videos[-1]
+        print(f"\n📥 Downloading: {latest['filename']}")
+        print(f"   Saved at: {latest['path']}")
+        
+        # In Termux, we can't easily copy to downloads, so just show the path
+        print("\n💡 The video is saved in the festival_videos folder")
+        print(f"   Full path: {os.path.abspath(latest['path'])}")
 
     def list_videos(self):
         """List all received videos"""
@@ -583,7 +582,10 @@ class FestivalReceiver:
         print("\n🧹 Cleaning up...")
         if self.ngrok_process:
             self.ngrok_process.terminate()
-            self.ngrok_process.wait()
+            try:
+                self.ngrok_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.ngrok_process.kill()
         print("✅ Done!")
 
     def run(self):
@@ -600,7 +602,8 @@ class FestivalReceiver:
             # Start services
             self.start_flask()
             if not self.start_ngrok():
-                print("❌ Failed to start ngrok. Make sure you've authenticated.")
+                print("❌ Failed to start ngrok.")
+                print("💡 Make sure you've authenticated with: ngrok config add-authtoken YOUR_TOKEN")
                 return
             
             # Generate and display link
