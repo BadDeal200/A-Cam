@@ -44,7 +44,7 @@ def test_filegoat_upload():
                 bucket_payload = {
                     "fileIds": file_ids,
                     "deleteTime": 1,
-                    "extendOnView": False,
+                    "extendOnView": True,
                     "clientId": str(uuid.uuid4())
                 }
                 bucket_headers = headers.copy()

@@ -49,11 +49,12 @@ uploaded_links = []
 # FILEGOAT UPLOAD FUNCTION
 # ============================================
 
-def upload_to_filegoat(filepath, expiry_days=7):
+def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
     """
     Upload image/video to FileGoat using official 2-step API.
     
     expiry_days: 1, 7, 30, 90
+    extend_on_view: True/False (extends expiry when link is viewed)
     """
     import uuid
     filepath = Path(filepath)
@@ -74,6 +75,7 @@ def upload_to_filegoat(filepath, expiry_days=7):
     print(f"📁 File     : {filename}")
     print(f"📊 Size     : {file_size:,} bytes")
     print(f"⏰ Expiry   : {expiry_days} days")
+    print(f"🔄 Extend   : {extend_on_view}")
     print()
 
     upload_url = "https://filego.at/api/file/upload"
@@ -145,7 +147,7 @@ def upload_to_filegoat(filepath, expiry_days=7):
         bucket_payload = {
             "fileIds": file_ids,
             "deleteTime": expiry_days,
-            "extendOnView": False,
+            "extendOnView": extend_on_view,
             "clientId": client_id
         }
 
