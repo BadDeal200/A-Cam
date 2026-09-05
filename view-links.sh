@@ -1,16 +1,9 @@
 #!/bin/bash
-# view-links.sh - View all cloud links
+# view-links.sh - View received files and gallery link
 
-echo "☁️ FileGoat Links - All Uploaded Files"
-echo "======================================="
+echo "🌐 Received Files & Ngrok Gallery"
+echo "=================================="
 echo ""
-
-if [ -f "cloud_links.txt" ]; then
-    cat cloud_links.txt
-else
-    echo "📭 No cloud links yet. Run the server and receive files first."
-fi
-
-echo ""
-echo "📋 To check cloud links while server is running:"
-echo "   curl http://localhost:5000/cloud-links"
+echo "📋 To check received media files while server is running:"
+echo "   curl http://localhost:5000/files"
+echo "   curl http://localhost:5000/gallery"

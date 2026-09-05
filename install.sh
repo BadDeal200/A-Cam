@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh - Setup script for Parrot OS with FileGoat
+# install.sh - Setup script for Parrot OS with Ngrok Direct Receiver
 
 echo "🎁 Gift Video Receiver - Installation"
 echo "======================================"
@@ -50,8 +50,8 @@ chmod +x server.py
 echo ""
 echo "✅ Installation complete!"
 echo ""
-echo "☁️ FileGoat is ready for cloud uploads!"
-echo "   Files will be uploaded with auto-expiry (1-90 days)"
+echo "🌐 Direct Ngrok Server is ready!"
+echo "   Received media files are saved locally and accessible live via Ngrok."
 echo ""
 echo "🚀 To run the server:"
 echo "   source venv/bin/activate"

