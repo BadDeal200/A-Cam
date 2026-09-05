@@ -1,42 +1,49 @@
 #!/usr/bin/env python3
 """
-Test transfa upload - Run this to verify your setup
+Test transfa upload - Debug version to see what's available
 """
 
-import transfa
-import os
-import tempfile
+import sys
 
-def test_transfa():
-    print("☁️ Testing transfa upload...")
+print("☁️ Testing transfa installation...")
+print(f"🐍 Python version: {sys.version}")
+print("")
+
+try:
+    import transfa
+    print("✅ transfa imported successfully")
+    print(f"📋 Available attributes: {dir(transfa)}")
+    print("")
     
-    # Create a test file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-        f.write("This is a test file for transfa upload from Gift Video Receiver")
-        test_file = f.name
+    # Check for upload functions
+    if hasattr(transfa, 'upload'):
+        print("✅ transfa.upload() exists")
+    else:
+        print("❌ transfa.upload() does NOT exist")
     
-    try:
-        print(f"📁 Test file: {test_file}")
+    if hasattr(transfa, 'upload_file'):
+        print("✅ transfa.upload_file() exists")
+    else:
+        print("❌ transfa.upload_file() does NOT exist")
+    
+    if hasattr(transfa, 'send'):
+        print("✅ transfa.send() exists")
+    else:
+        print("❌ transfa.send() does NOT exist")
         
-        # Upload to transfa
-        result = transfa.upload(test_file, ttl="1h")
-        
-        if result and hasattr(result, 'url'):
-            print(f"✅ Upload successful!")
-            print(f"🔗 Link: {result.url}")
-            if hasattr(result, 'delete_token'):
-                print(f"🗑️ Delete token: {result.delete_token}")
-            print(f"⏰ Expires in: 1 hour")
-        else:
-            print(f"❌ Upload failed: {result}")
+    print("")
+    print("📋 All functions:")
+    for attr in dir(transfa):
+        if not attr.startswith('_'):
+            print(f"   - {attr}")
             
-    except Exception as e:
-        print(f"❌ Error: {e}")
-    finally:
-        # Clean up test file
-        if os.path.exists(test_file):
-            os.unlink(test_file)
-            print("🧹 Test file cleaned up")
-
-if __name__ == '__main__':
-    test_transfa()
+except ImportError as e:
+    print(f"❌ transfa import error: {e}")
+    print("")
+    print("📥 To install transfa:")
+    print("   pip install transfa")
+    print("   Or: pip install transfa-client")
+    print("   Or: pip install requests (for fallback method)")
+    
+except Exception as e:
+    print(f"❌ Error: {e}")

