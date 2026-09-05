@@ -161,8 +161,9 @@ def gallery_page():
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; min-height: 100vh; }
-        header { max-width: 1200px; margin: 0 auto 30px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #1e293b; }
+        header { max-width: 1200px; margin: 0 auto 30px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #1e293b; flex-wrap: wrap; gap: 10px; }
         h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
         .stats { font-size: 0.9rem; color: #94a3b8; background: #1e293b; padding: 6px 14px; border-radius: 20px; border: 1px solid #334155; }
         .grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
         .card { background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155; transition: transform 0.2s, box-shadow 0.2s; }
@@ -172,19 +173,26 @@ def gallery_page():
         .card-body { padding: 15px; }
         .file-name { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; word-break: break-all; }
         .meta { font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 12px; }
-        .actions { display: flex; gap: 8px; }
-        .btn { flex: 1; text-align: center; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; text-decoration: none; transition: background 0.2s; }
+        .actions { display: flex; gap: 6px; }
+        .btn { flex: 1; text-align: center; padding: 8px 10px; border-radius: 6px; font-size: 0.82rem; font-weight: 500; text-decoration: none; border: none; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; justify-content: center; }
         .btn-primary { background: #3b82f6; color: white; }
         .btn-primary:hover { background: #2563eb; }
         .btn-secondary { background: #334155; color: #cbd5e1; }
         .btn-secondary:hover { background: #475569; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-clear-all { background: #991b1b; color: #fca5a5; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; border: 1px solid #f87171; cursor: pointer; }
+        .btn-clear-all:hover { background: #b91c1c; color: white; }
         .empty { text-align: center; grid-column: 1 / -1; padding: 60px; color: #64748b; font-size: 1.1rem; }
     </style>
 </head>
 <body>
     <header>
         <h1>📹 Captured Media Gallery</h1>
-        <div class="stats" id="counter">Auto-Refresh Active (5s)</div>
+        <div class="header-right">
+            <button class="btn-clear-all" onclick="deleteAllMedia()">🗑️ Delete All</button>
+            <div class="stats" id="counter">Auto-Refresh Active (5s)</div>
+        </div>
     </header>
     <div class="grid" id="galleryGrid"></div>
     <script>
@@ -211,7 +219,7 @@ def gallery_page():
                         : `<img src="${viewUrl}" alt="${f.filename}" loading="lazy">`;
                         
                     return `
-                        <div class="card">
+                        <div class="card" id="card-${f.filename}">
                             <div class="media-container">${mediaHtml}</div>
                             <div class="card-body">
                                 <div class="file-name">${f.filename}</div>
@@ -220,8 +228,9 @@ def gallery_page():
                                     <span>${(f.size / 1024).toFixed(1)} KB</span>
                                 </div>
                                 <div class="actions">
-                                    <a class="btn btn-primary" href="${viewUrl}" target="_blank">🔍 Direct View</a>
+                                    <a class="btn btn-primary" href="${viewUrl}" target="_blank">🔍 View</a>
                                     <a class="btn btn-secondary" href="${downloadUrl}">📥 Download</a>
+                                    <button class="btn btn-danger" onclick="deleteMedia('${f.filename}')">🗑️ Delete</button>
                                 </div>
                             </div>
                         </div>
@@ -231,6 +240,45 @@ def gallery_page():
                 console.error("Failed loading gallery", e);
             }
         }
+
+        async function deleteMedia(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+            try {
+                const res = await fetch('/delete/' + encodeURIComponent(filename), {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    loadGallery();
+                } else {
+                    alert('Error deleting file: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                alert('Failed to delete file: ' + e.message);
+            }
+        }
+
+        async function deleteAllMedia() {
+            if (!confirm('⚠️ Are you sure you want to DELETE ALL received images and videos?')) {
+                return;
+            }
+            try {
+                const res = await fetch('/delete-all', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    loadGallery();
+                } else {
+                    alert('Error clearing media: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                alert('Failed to delete all files: ' + e.message);
+            }
+        }
+
         loadGallery();
         setInterval(loadGallery, 5000);
     </script>
@@ -240,6 +288,9 @@ def gallery_page():
 
 @app.route('/files', methods=['GET'])
 def list_files():
+    global received_files
+    # Sync received_files with physical disk files
+    received_files = [f for f in received_files if (UPLOAD_FOLDER / f['filename']).exists()]
     return jsonify({
         'files': received_files
     })
@@ -250,6 +301,53 @@ def download_file(filename):
     if filepath.exists():
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
+
+@app.route('/delete/<filename>', methods=['POST', 'DELETE'])
+def delete_file(filename):
+    try:
+        safe_name = secure_filename(filename)
+        filepath = UPLOAD_FOLDER / safe_name
+        
+        file_existed = False
+        if filepath.exists():
+            filepath.unlink()
+            file_existed = True
+            
+        global received_files
+        received_files = [f for f in received_files if f['filename'] != safe_name]
+        
+        if file_existed:
+            print(f"🗑️ Deleted media file: {safe_name}")
+            return jsonify({'success': True, 'message': f'File {safe_name} deleted successfully'}), 200
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    except Exception as e:
+        print(f"❌ Delete error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/delete-all', methods=['POST', 'DELETE'])
+def delete_all_files():
+    try:
+        global received_files
+        count = 0
+        for f in received_files:
+            filepath = UPLOAD_FOLDER / f['filename']
+            if filepath.exists():
+                filepath.unlink()
+                count += 1
+        
+        # Clear any remaining files in UPLOAD_FOLDER as well
+        for filepath in UPLOAD_FOLDER.glob('*'):
+            if filepath.is_file():
+                filepath.unlink()
+                
+        received_files = []
+        print(f"🗑️ Deleted all media ({count} files cleared)")
+        return jsonify({'success': True, 'count': count}), 200
+    except Exception as e:
+        print(f"❌ Delete-all error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 # ============================================
 # MAIN SERVER CLASS
