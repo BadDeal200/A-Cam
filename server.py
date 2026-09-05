@@ -51,10 +51,11 @@ uploaded_links = []
 
 def upload_to_filegoat(filepath, expiry_days=7):
     """
-    Upload image/video to FileGoat.
+    Upload image/video to FileGoat using official 2-step API.
     
     expiry_days: 1, 7, 30, 90
     """
+    import uuid
     filepath = Path(filepath)
 
     if not filepath.exists():
@@ -75,10 +76,8 @@ def upload_to_filegoat(filepath, expiry_days=7):
     print(f"⏰ Expiry   : {expiry_days} days")
     print()
 
-    # FileGoat upload endpoint
-    url = "https://filego.at/upload"
-
-    expiry_seconds = expiry_days * 24 * 60 * 60
+    upload_url = "https://filego.at/api/file/upload"
+    bucket_url = "https://filego.at/api/bucket"
 
     headers = {
         "User-Agent": (
@@ -91,6 +90,7 @@ def upload_to_filegoat(filepath, expiry_days=7):
     }
 
     try:
+        # Step 1: Upload file binary to get fileIds
         with open(filepath, "rb") as file:
             files = {
                 "file": (
@@ -99,25 +99,20 @@ def upload_to_filegoat(filepath, expiry_days=7):
                     "application/octet-stream"
                 )
             }
-            data = {
-                "expiry": str(expiry_seconds)
-            }
 
-            print("⬆️ Uploading...")
+            print("⬆️ Step 1: Uploading file to FileGoat...")
 
             response = requests.post(
-                url,
+                upload_url,
                 files=files,
-                data=data,
                 headers=headers,
                 timeout=600
             )
 
-        print(f"📡 HTTP Status: {response.status_code}")
+        print(f"📡 Step 1 HTTP Status: {response.status_code}")
 
-        # Check HTTP status
         if response.status_code != 200:
-            print("❌ Upload failed")
+            print("❌ File upload failed")
             print("Server response:")
             print(response.text[:1000])
 
@@ -127,9 +122,8 @@ def upload_to_filegoat(filepath, expiry_days=7):
                 "response": response.text[:1000]
             }
 
-        # Parse response
         try:
-            result = response.json()
+            upload_result = response.json()
         except ValueError:
             print("⚠️ Server did not return JSON")
             return {
@@ -138,22 +132,56 @@ def upload_to_filegoat(filepath, expiry_days=7):
                 "response": response.text[:1000]
             }
 
-        print("📦 Server response:")
-        print(result)
-
-        # Find URL
-        cloud_url = (
-            result.get("url")
-            or result.get("share_url")
-            or result.get("download_url")
-        )
-
-        if not cloud_url:
+        file_ids = upload_result.get("fileIds")
+        if not file_ids:
             return {
                 "success": False,
-                "error": "Upload succeeded but no URL was returned",
-                "response": result
+                "error": "Upload succeeded but no fileIds returned",
+                "response": upload_result
             }
+
+        # Step 2: Create bucket to generate shareable URL
+        client_id = str(uuid.uuid4())
+        bucket_payload = {
+            "fileIds": file_ids,
+            "deleteTime": expiry_days,
+            "extendOnView": False,
+            "clientId": client_id
+        }
+
+        bucket_headers = headers.copy()
+        bucket_headers["Content-Type"] = "application/json"
+
+        print("📦 Step 2: Creating bucket...")
+        bucket_response = requests.post(
+            bucket_url,
+            json=bucket_payload,
+            headers=bucket_headers,
+            timeout=30
+        )
+
+        print(f"📡 Step 2 HTTP Status: {bucket_response.status_code}")
+
+        if bucket_response.status_code != 200:
+            print("❌ Bucket creation failed")
+            print("Server response:", bucket_response.text[:1000])
+            return {
+                "success": False,
+                "error": f"HTTP {bucket_response.status_code}",
+                "response": bucket_response.text[:1000]
+            }
+
+        bucket_result = bucket_response.json()
+        slug = bucket_result.get("slug")
+
+        if not slug:
+            return {
+                "success": False,
+                "error": "Bucket creation succeeded but no slug returned",
+                "response": bucket_result
+            }
+
+        cloud_url = f"https://filego.at/bucket/{slug}"
 
         print()
         print("✅ UPLOAD SUCCESS")
@@ -167,7 +195,7 @@ def upload_to_filegoat(filepath, expiry_days=7):
             "expiry": f"{expiry_days} days",
             "filename": filename,
             "size": file_size,
-            "response": result
+            "response": bucket_result
         }
 
     except requests.exceptions.Timeout:

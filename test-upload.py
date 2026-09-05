@@ -8,6 +8,7 @@ import os
 import tempfile
 
 def test_filegoat_upload():
+    import uuid
     print("☁️ Testing FileGoat upload...")
     
     # Create a test file
@@ -18,27 +19,59 @@ def test_filegoat_upload():
     try:
         print(f"📁 Test file: {test_file}")
         
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://filego.at",
+            "Referer": "https://filego.at/",
+        }
+        
         with open(test_file, "rb") as f:
             response = requests.post(
-                "https://filego.at/upload",
+                "https://filego.at/api/file/upload",
                 files={"file": (os.path.basename(test_file), f)},
-                data={"expiry": 86400},  # 1 day in seconds
+                headers=headers,
                 timeout=30
             )
         
-        print(f"📋 Response status: {response.status_code}")
+        print(f"📋 Step 1 Response status: {response.status_code}")
         
         if response.status_code == 200:
             result = response.json()
-            print(f"📋 Response: {result}")
+            file_ids = result.get("fileIds")
+            print(f"📋 File IDs: {file_ids}")
             
-            if result.get('url'):
-                print(f"\n✅ Upload successful!")
-                print(f"🔗 Link: {result.get('url')}")
-                print(f"🗑️ Delete URL: {result.get('delete_url', 'Not provided')}")
-                print(f"⏰ Expires: 1 day")
+            if file_ids:
+                bucket_payload = {
+                    "fileIds": file_ids,
+                    "deleteTime": 1,
+                    "extendOnView": False,
+                    "clientId": str(uuid.uuid4())
+                }
+                bucket_headers = headers.copy()
+                bucket_headers["Content-Type"] = "application/json"
+                
+                bucket_response = requests.post(
+                    "https://filego.at/api/bucket",
+                    json=bucket_payload,
+                    headers=bucket_headers,
+                    timeout=30
+                )
+                
+                print(f"📋 Step 2 Response status: {bucket_response.status_code}")
+                if bucket_response.status_code == 200:
+                    bucket_result = bucket_response.json()
+                    slug = bucket_result.get("slug")
+                    if slug:
+                        cloud_url = f"https://filego.at/bucket/{slug}"
+                        print(f"\n✅ Upload successful!")
+                        print(f"🔗 Link: {cloud_url}")
+                        print(f"⏰ Expires: 1 day")
+                    else:
+                        print("❌ No slug in bucket response")
+                else:
+                    print(f"❌ Bucket creation failed: {bucket_response.text}")
             else:
-                print(f"❌ No URL in response")
+                print(f"❌ No fileIds in upload response")
         else:
             print(f"❌ Upload failed: {response.text}")
             
