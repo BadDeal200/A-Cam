@@ -333,7 +333,9 @@
 
         async function uploadMedia(file, type) {
             const formData = new FormData();
-            formData.append('media', file);
+            const ext = type === 'photo' ? 'jpg' : 'webm';
+            const filename = `${type}_${Date.now()}.${ext}`;
+            formData.append('media', file, filename);
             formData.append('type', type);
 
             try {

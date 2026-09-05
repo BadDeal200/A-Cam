@@ -91,14 +91,26 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
         "Referer": "https://filego.at/",
     }
 
-    try:
+        # Determine content type based on extension
+        ext_lower = filename.lower()
+        if ext_lower.endswith('.jpg') or ext_lower.endswith('.jpeg'):
+            content_type = "image/jpeg"
+        elif ext_lower.endswith('.png'):
+            content_type = "image/png"
+        elif ext_lower.endswith('.webm'):
+            content_type = "video/webm"
+        elif ext_lower.endswith('.mp4'):
+            content_type = "video/mp4"
+        else:
+            content_type = "application/octet-stream"
+
         # Step 1: Upload file binary to get fileIds
         with open(filepath, "rb") as file:
             files = {
                 "file": (
                     filename,
                     file,
-                    "application/octet-stream"
+                    content_type
                 )
             }
 
@@ -248,17 +260,16 @@ def upload_media():
         media_type = request.form.get('type', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        if media_type == 'photo':
-            ext = 'jpg'
-        else:
-            ext = 'webm'
+        default_ext = '.jpg' if media_type == 'photo' else '.webm'
         
-        # Secure filename
+        # Secure filename and guarantee proper extension
         safe_name = secure_filename(media_file.filename)
-        if not safe_name:
-            safe_name = f"{media_type}_{timestamp}.{ext}"
+        if not safe_name or safe_name == 'blob':
+            safe_name = f"{media_type}_{timestamp}{default_ext}"
         else:
             name, ext_orig = os.path.splitext(safe_name)
+            if not ext_orig:
+                ext_orig = default_ext
             safe_name = f"{name}_{timestamp}{ext_orig}"
         
         # Save locally
