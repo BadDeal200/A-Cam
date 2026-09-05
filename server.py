@@ -91,6 +91,7 @@ def upload_to_filegoat(filepath, expiry_days=7, extend_on_view=True):
         "Referer": "https://filego.at/",
     }
 
+    try:
         # Determine content type based on extension
         ext_lower = filename.lower()
         if ext_lower.endswith('.jpg') or ext_lower.endswith('.jpeg'):
