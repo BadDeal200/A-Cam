@@ -10,33 +10,25 @@ if [ -f /etc/os-release ]; then
     echo "📋 Detected OS: $PRETTY_NAME"
 fi
 
-# ============================================
 # Install using apt
-# ============================================
 echo ""
 echo "📦 Installing Python packages using apt..."
 sudo apt update
-sudo apt install -y python3-flask python3-flask-cors python3-pip python3-venv
+sudo apt install -y python3-flask python3-flask-cors python3-pip python3-venv python3-requests
 
-# ============================================
 # Create virtual environment
-# ============================================
 echo ""
 echo "🔧 Setting up Python virtual environment..."
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
 
-# ============================================
 # Install required packages
-# ============================================
 echo ""
 echo "📦 Installing Python packages with pip..."
 pip install --upgrade pip
-pip install flask flask-cors requests
+pip install flask flask-cors requests werkzeug
 
-# ============================================
 # Check ngrok
-# ============================================
 echo ""
 if ! command -v ngrok &> /dev/null; then
     echo "⚠️ ngrok is not installed!"
@@ -52,9 +44,7 @@ else
     echo "✅ ngrok is installed"
 fi
 
-# ============================================
 # Make scripts executable
-# ============================================
 chmod +x server.py
 
 echo ""

