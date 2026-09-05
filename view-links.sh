@@ -1,16 +1,16 @@
 #!/bin/bash
-# view-links.sh - View all transfa links
+# view-links.sh - View all cloud links
 
-echo "☁️ transfa Links - All Uploaded Files"
-echo "======================================"
+echo "☁️ tempfile.org Links - All Uploaded Files"
+echo "=========================================="
 echo ""
 
-if [ -f "transfa_links.txt" ]; then
-    cat transfa_links.txt
+if [ -f "cloud_links.txt" ]; then
+    cat cloud_links.txt
 else
-    echo "📭 No transfa links yet. Run the server and receive files first."
+    echo "📭 No cloud links yet. Run the server and receive files first."
 fi
 
 echo ""
-echo "📋 To check transfa links while server is running:"
-echo "   curl http://localhost:5000/transfa-links"
+echo "📋 To check cloud links while server is running:"
+echo "   curl http://localhost:5000/cloud-links"

@@ -1,8 +1,8 @@
 #!/bin/bash
-# install-fixed.sh - Fixed installation script
+# install.sh - Setup script for Parrot OS with tempfile.org
 
-echo "🎁 Gift Video Receiver - Fixed Installation"
-echo "============================================"
+echo "🎁 Gift Video Receiver - Installation"
+echo "======================================"
 
 # Check if running on Parrot OS or Debian-based system
 if [ -f /etc/os-release ]; then
@@ -27,21 +27,12 @@ python3 -m venv venv --system-site-packages
 source venv/bin/activate
 
 # ============================================
-# Install packages
+# Install required packages
 # ============================================
 echo ""
 echo "📦 Installing Python packages with pip..."
 pip install --upgrade pip
-
-# Try different transfa packages
-echo ""
-echo "📦 Trying to install transfa..."
-pip install transfa requests
-
-# Check if transfa works
-echo ""
-echo "🧪 Testing transfa installation..."
-python3 test-transfa.py
+pip install flask flask-cors requests
 
 # ============================================
 # Check ngrok
@@ -64,10 +55,13 @@ fi
 # ============================================
 # Make scripts executable
 # ============================================
-chmod +x server.py test-transfa.py
+chmod +x server.py
 
 echo ""
 echo "✅ Installation complete!"
+echo ""
+echo "☁️ tempfile.org is ready for cloud uploads!"
+echo "   Files will be uploaded with auto-expiry"
 echo ""
 echo "🚀 To run the server:"
 echo "   source venv/bin/activate"
