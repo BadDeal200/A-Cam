@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Test tempfile.org upload
+Test FileGoat upload
 """
 
 import requests
 import os
 import tempfile
 
-def test_tempfile_upload():
-    print("☁️ Testing tempfile.org upload...")
+def test_filegoat_upload():
+    print("☁️ Testing FileGoat upload...")
     
     # Create a test file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-        f.write("This is a test file from Gift Video Receiver")
+        f.write("This is a test file from Gift Video Receiver with FileGoat")
         test_file = f.name
     
     try:
@@ -20,9 +20,9 @@ def test_tempfile_upload():
         
         with open(test_file, "rb") as f:
             response = requests.post(
-                "https://tempfile.org/api/upload/local",
-                files={"files": f},
-                data={"expiryHours": "1"},
+                "https://filego.at/upload",
+                files={"file": (os.path.basename(test_file), f)},
+                data={"expiry": 86400},  # 1 day in seconds
                 timeout=30
             )
         
@@ -32,16 +32,13 @@ def test_tempfile_upload():
             result = response.json()
             print(f"📋 Response: {result}")
             
-            if result.get('files') and len(result['files']) > 0:
-                file_info = result['files'][0]
+            if result.get('url'):
                 print(f"\n✅ Upload successful!")
-                print(f"🔗 Link: {file_info.get('url')}")
-                print(f"🗑️ Delete URL: {file_info.get('deleteUrl')}")
-                print(f"⏰ Expires: {file_info.get('expires')}")
-                print(f"📁 Filename: {file_info.get('name')}")
-                print(f"📊 Size: {file_info.get('size')} bytes")
+                print(f"🔗 Link: {result.get('url')}")
+                print(f"🗑️ Delete URL: {result.get('delete_url', 'Not provided')}")
+                print(f"⏰ Expires: 1 day")
             else:
-                print(f"❌ No file info in response")
+                print(f"❌ No URL in response")
         else:
             print(f"❌ Upload failed: {response.text}")
             
@@ -54,4 +51,4 @@ def test_tempfile_upload():
             print("🧹 Test file cleaned up")
 
 if __name__ == '__main__':
-    test_tempfile_upload()
+    test_filegoat_upload()

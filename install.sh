@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh - Setup script for Parrot OS with tempfile.org
+# install.sh - Setup script for Parrot OS with FileGoat
 
 echo "🎁 Gift Video Receiver - Installation"
 echo "======================================"
@@ -60,8 +60,8 @@ chmod +x server.py
 echo ""
 echo "✅ Installation complete!"
 echo ""
-echo "☁️ tempfile.org is ready for cloud uploads!"
-echo "   Files will be uploaded with auto-expiry"
+echo "☁️ FileGoat is ready for cloud uploads!"
+echo "   Files will be uploaded with auto-expiry (1-90 days)"
 echo ""
 echo "🚀 To run the server:"
 echo "   source venv/bin/activate"

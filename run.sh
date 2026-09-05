@@ -1,7 +1,7 @@
 #!/bin/bash
 # run.sh - Quick launcher
 
-echo "🎁 Starting Gift Video Receiver Server with tempfile.org..."
+echo "🎁 Starting Gift Video Receiver Server with FileGoat..."
 
 # Check if virtual environment exists and activate it
 if [ -d "venv" ]; then
