@@ -468,6 +468,56 @@ class GiftServer:
         print("📥 Install from: https://ngrok.com/download")
         return False
 
+    def apply_ngrok_authtoken(self, token):
+        try:
+            result = subprocess.run(['ngrok', 'config', 'add-authtoken', token], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("   ✅ Ngrok authtoken configured successfully!")
+                return True
+            else:
+                result2 = subprocess.run(['ngrok', 'authtoken', token], capture_output=True, text=True)
+                if result2.returncode == 0:
+                    print("   ✅ Ngrok authtoken configured successfully!")
+                    return True
+                else:
+                    err = result.stderr.strip() or result2.stderr.strip()
+                    print(f"   ⚠️ Warning: {err}")
+                    return False
+        except Exception as e:
+            print(f"   ⚠️ Could not set ngrok authtoken: {e}")
+            return False
+
+    def setup_ngrok_authtoken(self):
+        token = os.getenv("NGROK_AUTHTOKEN")
+        token_file = Path(".ngrok_token")
+        choice = ""
+
+        if not token and token_file.exists():
+            token = token_file.read_text().strip()
+
+        print("\n🔑 NGROK AUTHENTICATION SETUP:")
+        if token:
+            masked = f"{token[:6]}...{token[-4:]}" if len(token) > 10 else "***"
+            print(f"   Found saved authtoken: {masked}")
+            choice = input("   Use saved authtoken? (Y/n, or paste new token): ").strip()
+            if choice.lower() in ['', 'y', 'yes']:
+                return self.apply_ngrok_authtoken(token)
+            elif choice.lower() not in ['n', 'no'] and len(choice) > 10:
+                token = choice
+            elif choice.lower() in ['n', 'no']:
+                token = ""
+
+        if not token:
+            print("   Get your free authtoken from: https://dashboard.ngrok.com/get-started/your-authtoken")
+            token = input("   Enter your ngrok Authtoken (press Enter to skip): ").strip()
+
+        if token:
+            token_file.write_text(token)
+            return self.apply_ngrok_authtoken(token)
+        else:
+            print("   ⚠️ Skipping authtoken setup (using existing CLI configuration).")
+            return True
+
     def monitor_ngrok(self):
         try:
             time.sleep(3)
@@ -553,6 +603,9 @@ class GiftServer:
             
             if not self.check_ngrok():
                 return
+
+            # Ngrok Authtoken Setup
+            self.setup_ngrok_authtoken()
             
             # Get cloud config
             global FILEGOAT_EXPIRY_DAYS
