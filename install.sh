@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh - Setup script for Parrot OS
+# install.sh - Setup script for Parrot OS with transfa
 
 echo "🎁 Gift Video Receiver - Installation"
 echo "======================================"
@@ -11,7 +11,7 @@ if [ -f /etc/os-release ]; then
 fi
 
 # ============================================
-# Install using apt (Recommended)
+# Install using apt
 # ============================================
 echo ""
 echo "📦 Installing Python packages using apt..."
@@ -19,15 +19,20 @@ sudo apt update
 sudo apt install -y python3-flask python3-flask-cors python3-pip python3-venv
 
 # ============================================
-# Create virtual environment (Optional)
+# Create virtual environment
 # ============================================
 echo ""
-echo "🔧 Setting up Python virtual environment (recommended)..."
+echo "🔧 Setting up Python virtual environment..."
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
 
-echo "✅ Virtual environment created at: ./venv"
-echo "   To activate: source venv/bin/activate"
+# ============================================
+# Install transfa and other pip packages
+# ============================================
+echo ""
+echo "📦 Installing Python packages with pip..."
+pip install --upgrade pip
+pip install transfa flask flask-cors
 
 # ============================================
 # Check ngrok
@@ -54,6 +59,8 @@ chmod +x server.py
 
 echo ""
 echo "✅ Installation complete!"
+echo ""
+echo "☁️ transfa is now installed for cloud uploads!"
 echo ""
 echo "🚀 To run the server:"
 echo "   source venv/bin/activate"
