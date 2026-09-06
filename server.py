@@ -355,6 +355,7 @@ class GiftServer:
         self.ngrok_url = None
         self.running = True
         self.ngrok_ready = threading.Event()
+        self.ngrok_cmd = 'ngrok'
 
     def check_html_files(self):
         if not os.path.exists(FESTIVAL_HTML):
@@ -365,23 +366,148 @@ class GiftServer:
             return False
         return True
 
-    def check_ngrok(self):
+    def detect_os_and_arch(self):
+        import platform
+
+        system = platform.system().lower()
+        if 'linux' in system:
+            os_type = 'linux'
+        elif 'darwin' in system or 'mac' in system:
+            os_type = 'darwin'
+        elif 'win' in system:
+            os_type = 'windows'
+        elif 'freebsd' in system:
+            os_type = 'freebsd'
+        else:
+            os_type = 'linux'
+
+        machine = platform.machine().lower()
+        if machine in ['x86_64', 'amd64', 'x64']:
+            arch = 'amd64'
+        elif machine in ['aarch64', 'arm64', 'armv8l', 'armv8b']:
+            arch = 'arm64'
+        elif machine.startswith('arm'):
+            arch = 'arm'
+        elif machine in ['i386', 'i686', 'x86']:
+            arch = '386'
+        else:
+            arch = 'amd64'
+
+        return os_type, arch
+
+    def find_ngrok_command(self):
+        # 1. Check if 'ngrok' is executable in system PATH
         try:
-            result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
-            return result.returncode == 0
-        except FileNotFoundError:
-            print("\n❌ ngrok is not installed or not in PATH!")
-            print("📥 Install from: https://ngrok.com/download")
-            return False
+            res = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
+            if res.returncode == 0:
+                return 'ngrok'
+        except Exception:
+            pass
+
+        # 2. Check local project directory
+        bin_name = 'ngrok.exe' if sys.platform.startswith('win') else 'ngrok'
+        local_bin = Path('.') / bin_name
+        if local_bin.exists():
+            try:
+                res = subprocess.run([str(local_bin.absolute()), '--version'], capture_output=True, text=True)
+                if res.returncode == 0:
+                    return str(local_bin.absolute())
+            except Exception:
+                pass
+            return str(local_bin.absolute())
+
+        return None
+
+    def auto_download_ngrok(self):
+        os_type, arch = self.detect_os_and_arch()
+        print(f"📋 Device OS: {os_type} | CPU Architecture: {arch}")
+
+        ext = 'zip' if os_type == 'windows' else 'tgz'
+        download_url = f"https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-{os_type}-{arch}.{ext}"
+
+        bin_name = 'ngrok.exe' if os_type == 'windows' else 'ngrok'
+        local_path = Path('.') / bin_name
+
+        print(f"📥 Automatically downloading ngrok server...")
+        print(f"   URL: {download_url}")
+
+        import tempfile
+        import shutil
+        import zipfile
+        import tarfile
+
+        try:
+            temp_dir = Path(tempfile.mkdtemp())
+            archive_path = temp_dir / f"ngrok-download.{ext}"
+
+            req = urllib.request.Request(
+                download_url,
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            with urllib.request.urlopen(req, timeout=60) as response, open(archive_path, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+
+            print(f"📦 Extracting {bin_name}...")
+            if ext == 'zip':
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+            else:
+                with tarfile.open(archive_path, 'r:*') as tar_ref:
+                    tar_ref.extractall(temp_dir)
+
+            extracted_bin = temp_dir / bin_name
+            if not extracted_bin.exists():
+                found = list(temp_dir.rglob(bin_name))
+                if found:
+                    extracted_bin = found[0]
+
+            if extracted_bin.exists():
+                shutil.move(str(extracted_bin), str(local_path))
+                if os_type != 'windows':
+                    os.chmod(local_path, 0o755)
+                print(f"✅ Downloaded and saved ngrok server to {local_path.absolute()}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return str(local_path.absolute())
+            else:
+                print("❌ Binary not found in extracted archive.")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return None
+        except Exception as e:
+            print(f"❌ Auto-download failed: {e}")
+            return None
+
+    def check_ngrok(self):
+        cmd = self.find_ngrok_command()
+        if cmd:
+            self.ngrok_cmd = cmd
+            return True
+
+        print("\n⚠️ ngrok is not installed or not found in PATH!")
+        print("🔍 Identifying device OS & CPU architecture to auto-download ngrok...")
+
+        downloaded_cmd = self.auto_download_ngrok()
+        if downloaded_cmd:
+            self.ngrok_cmd = downloaded_cmd
+            try:
+                res = subprocess.run([self.ngrok_cmd, '--version'], capture_output=True, text=True)
+                if res.returncode == 0:
+                    print(f"✅ ngrok verified ({res.stdout.strip()})")
+                    return True
+            except Exception as e:
+                print(f"❌ Verification failed for downloaded ngrok: {e}")
+
+        print("\n❌ Could not automatically install ngrok.")
+        print("📥 Please install ngrok manually from https://ngrok.com/download")
+        return False
 
     def apply_ngrok_authtoken(self, token):
         try:
-            result = subprocess.run(['ngrok', 'config', 'add-authtoken', token], capture_output=True, text=True)
+            result = subprocess.run([self.ngrok_cmd, 'config', 'add-authtoken', token], capture_output=True, text=True)
             if result.returncode == 0:
                 print("   ✅ Ngrok authtoken configured successfully!")
                 return True
             else:
-                result2 = subprocess.run(['ngrok', 'authtoken', token], capture_output=True, text=True)
+                result2 = subprocess.run([self.ngrok_cmd, 'authtoken', token], capture_output=True, text=True)
                 return result2.returncode == 0
         except Exception as e:
             print(f"   ⚠️ Could not set ngrok authtoken: {e}")
@@ -444,7 +570,7 @@ class GiftServer:
         print(f"\n🚀 Starting ngrok tunnel on port {self.port}...")
         try:
             self.ngrok_process = subprocess.Popen(
-                ['ngrok', 'http', str(self.port)],
+                [self.ngrok_cmd, 'http', str(self.port)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
