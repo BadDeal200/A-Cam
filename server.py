@@ -23,10 +23,20 @@ from werkzeug.utils import secure_filename
 # ============================================
 # CONFIGURATION
 # ============================================
-UPLOAD_FOLDER = Path("gift_videos")
+UPLOAD_FOLDER = Path("captured_media")
 PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
+
+# Ensure upload directory exists and migrate old folder if present
+OLD_FOLDER = Path("gift_videos")
+if OLD_FOLDER.exists() and OLD_FOLDER.is_dir():
+    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    for old_file in OLD_FOLDER.glob('*'):
+        if old_file.is_file():
+            new_file = UPLOAD_FOLDER / old_file.name
+            if not new_file.exists():
+                old_file.rename(new_file)
 
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
