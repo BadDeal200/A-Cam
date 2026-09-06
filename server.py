@@ -385,15 +385,19 @@ class GiftServer:
 
     def get_capture_mode(self):
         print("\n📸 Select capture mode:")
-        print("  1. Video - Record 15 second video")
-        print("  2. Photo - Capture 5 photos")
+        print("  1. Video - Record video")
+        print("  2. Photo - Capture photos")
         
         while True:
             choice = input("\nEnter choice (1 or 2): ").strip()
             if choice == '1':
-                return 'video', 15, 0
+                dur_input = input("   ⏱️ Enter video duration in seconds (default 15): ").strip()
+                duration = int(dur_input) if dur_input.isdigit() and int(dur_input) > 0 else 15
+                return 'video', duration, 0
             elif choice == '2':
-                return 'photo', 0, 5
+                photo_input = input("   📸 Enter number of photos to capture (default 5): ").strip()
+                photos = int(photo_input) if photo_input.isdigit() and int(photo_input) > 0 else 5
+                return 'photo', 0, photos
             else:
                 print("❌ Invalid choice. Enter 1 or 2")
 

