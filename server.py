@@ -527,18 +527,27 @@ class GiftServer:
 
     def monitor_ngrok(self):
         try:
-            time.sleep(3)
-            for attempt in range(10):
-                try:
-                    with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=2) as response:
-                        data = json.loads(response.read().decode())
-                        for tunnel in data.get('tunnels', []):
-                            if tunnel.get('proto') == 'https':
-                                self.ngrok_url = tunnel.get('public_url')
-                                self.ngrok_ready.set()
-                                return
-                except Exception:
-                    time.sleep(3)
+            time.sleep(2)
+            for attempt in range(15):
+                if self.ngrok_process and self.ngrok_process.poll() is not None:
+                    _, err = self.ngrok_process.communicate()
+                    err_msg = err.strip() if err else "Process exited unexpectedly."
+                    print(f"\n❌ ngrok process stopped working! Error details:\n   {err_msg}")
+                    self.ngrok_ready.set()
+                    return
+
+                for api_url in ['http://127.0.0.1:4040/api/tunnels', 'http://localhost:4040/api/tunnels']:
+                    try:
+                        with urllib.request.urlopen(api_url, timeout=2) as response:
+                            data = json.loads(response.read().decode())
+                            for tunnel in data.get('tunnels', []):
+                                if tunnel.get('proto') == 'https':
+                                    self.ngrok_url = tunnel.get('public_url')
+                                    self.ngrok_ready.set()
+                                    return
+                    except Exception:
+                        pass
+                time.sleep(2)
         except Exception as e:
             print(f"❌ Error monitoring ngrok: {e}")
 
@@ -548,20 +557,24 @@ class GiftServer:
         try:
             self.ngrok_process = subprocess.Popen(
                 ['ngrok', 'http', str(self.port)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                text=True
             )
             
             monitor_thread = threading.Thread(target=self.monitor_ngrok)
             monitor_thread.daemon = True
             monitor_thread.start()
             
-            if self.ngrok_ready.wait(timeout=30):
+            if self.ngrok_ready.wait(timeout=30) and self.ngrok_url:
                 print(f"✅ Tunnel established!")
                 return True
             else:
-                print("⚠️ ngrok started but URL not found")
+                if self.ngrok_process and self.ngrok_process.poll() is not None:
+                    pass  # Exact error was already printed in monitor_ngrok
+                else:
+                    print("⚠️ ngrok started but URL not found on http://127.0.0.1:4040")
                 return False
                 
         except Exception as e:
